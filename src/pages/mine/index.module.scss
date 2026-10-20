@@ -1,0 +1,203 @@
+@use '@/styles/variables.scss' as *;
+
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: $color-bg-page;
+}
+
+/* ---------- 顶部：头像 + 姓名 + 签名（浅色渐变，参考主流个人中心布局） ---------- */
+.hero {
+  padding: $spacing-xl $page-padding $spacing-lg;
+  background: linear-gradient(165deg, #f7f0fb 0%, #ece0f2 100%);
+}
+
+.heroRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: $spacing-md;
+}
+
+.avatarWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatarBadge {
+  position: absolute;
+  right: -10rpx;
+  bottom: 0;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-round;
+  background: $color-error;
+  box-shadow: 0 2rpx 8rpx rgba(245, 63, 63, 0.35);
+}
+
+.avatarBadgeText {
+  font-size: 18rpx;
+  color: $color-text-white;
+  white-space: nowrap;
+}
+
+.heroInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.name {
+  font-size: 40rpx;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  @include text-ellipsis;
+}
+
+.signature {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  @include text-ellipsis;
+}
+
+/* ---------- 会员权益渐变横幅 ---------- */
+.memberBanner {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-lg;
+  border-radius: $radius-lg;
+  background: linear-gradient(120deg, $color-primary-dark 0%, $color-primary 55%, $color-primary-light 100%);
+  box-shadow: $shadow-card;
+  transition: all $transition-base;
+
+  &:active {
+    opacity: 0.92;
+    transform: scale(0.99);
+  }
+}
+
+.memberHead {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memberTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-white;
+  white-space: nowrap;
+}
+
+.memberLink {
+  font-size: $font-size-xs;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+.memberDesc {
+  font-size: $font-size-sm;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: $line-height-normal;
+}
+
+/* ---------- 功能入口行（彩色圆图标） ---------- */
+.entryCard {
+  display: flex;
+  flex-direction: row;
+  margin-top: $spacing-md;
+  padding: $spacing-lg $spacing-sm;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-card;
+}
+
+.entryItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-sm;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.entryIcon {
+  @include flex-center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: $radius-round;
+}
+
+.entryIconText {
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.entryLabel {
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  white-space: nowrap;
+}
+
+/* ---------- 更多服务宫格 ---------- */
+.moreCard {
+  display: flex;
+  flex-direction: column;
+  margin-top: $spacing-md;
+  padding: $spacing-lg $spacing-sm $spacing-sm;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-card;
+}
+
+.moreTitle {
+  padding: 0 $spacing-sm $spacing-sm;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+}
+
+.moreGrid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.moreItem {
+  width: 25%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-md 0;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.moreIcon {
+  font-size: 48rpx;
+  line-height: 1;
+}
+
+.moreLabel {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.icp {
+  margin-top: auto;
+  padding-top: $spacing-xl;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  text-align: center;
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "mingpiantupu-d1gbmi23j8988d532",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "login",
+      "timeout": 10,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "description": "返回调用者 openid（CloudBase 免登录身份透出）"
+    },
+    {
+      "name": "seed",
+      "timeout": 60,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "description": "测试数据种子：完善名片字段/头像、我的名片补全、公司图谱（幂等 upsert）"
+    }
+  ]
+}

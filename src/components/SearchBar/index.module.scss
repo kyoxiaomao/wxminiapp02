@@ -1,0 +1,39 @@
+@use '@/styles/variables.scss' as *;
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  height: 72rpx;
+  padding: 0 $spacing-md;
+  border-radius: $radius-round;
+  background: $color-bg-card;
+  border: 1rpx solid $color-border;
+}
+
+.searchIcon {
+  font-size: $font-size-md;
+  margin-right: $spacing-sm;
+}
+
+.input {
+  flex: 1;
+  height: 100%;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}
+
+.placeholder {
+  color: $color-text-tertiary;
+}
+
+.clearIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: $color-bg-hover;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}

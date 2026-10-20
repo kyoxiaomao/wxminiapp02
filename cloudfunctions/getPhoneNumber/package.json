@@ -1,0 +1,9 @@
+{
+  "name": "getPhoneNumber",
+  "version": "1.0.0",
+  "description": "换取手机号（企业主体，用户按钮授权 code → 服务端换取真实手机号）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

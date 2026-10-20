@@ -1,0 +1,9 @@
+{
+  "name": "getCard",
+  "version": "1.0.0",
+  "description": "按 id 读取他人分享的活名片（服务端读，不受仅创建者可读写限制）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

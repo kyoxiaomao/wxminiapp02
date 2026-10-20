@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#7d3c98">
+<title>陈氏家族图谱</title>
+<style>
+  :root{
+    --bg:#d9c9dd;
+    --purple:#7d3c98;
+    --purple-soft:#8e44ad;
+    --ink:#3b2a44;
+    --ink-dim:#6d5a78;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0;padding:0;width:100%;height:100%;
+    overflow:hidden;overscroll-behavior:none;
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    user-select:none;-webkit-user-select:none;
+  }
+
+  #scene{
+    display:block;width:100vw;height:100vh;
+    touch-action:none;cursor:grab;
+    background:radial-gradient(circle at 50% 38%, #e4d8e8 0%, var(--bg) 62%, #cdb9d3 100%);
+  }
+  #scene.dragging{cursor:grabbing;}
+
+  /* ---------- 顶部工具栏 ---------- */
+  #topbar{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    display:flex;align-items:center;gap:10px;
+    background:linear-gradient(180deg, rgba(255,255,255,.78) 0%, rgba(255,255,255,.32) 70%, rgba(255,255,255,0) 100%);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    pointer-events:none;
+  }
+  #topbar .brand{
+    display:flex;align-items:center;gap:8px;
+    font-size:16px;font-weight:700;letter-spacing:.5px;
+    color:var(--purple);
+    text-shadow:0 1px 0 rgba(255,255,255,.7);
+  }
+  #topbar .brand .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--purple);
+    box-shadow:0 0 0 4px rgba(125,60,152,.18);
+  }
+  #topbar .spacer{flex:1;}
+  .tool-btn{
+    pointer-events:auto;
+    width:44px;height:44px;border:none;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.72);
+    color:var(--purple);
+    box-shadow:0 2px 10px rgba(90,50,110,.16);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    transition:transform .12s ease, background .12s ease;
+  }
+  .tool-btn:active{transform:scale(.92);background:rgba(255,255,255,.95);}
+  .tool-btn svg{width:22px;height:22px;display:block;}
+
+  /* ---------- 底部提示 ---------- */
+  #hint{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:15;
+    padding:7px 14px;border-radius:999px;
+    font-size:12px;color:#fff;white-space:nowrap;
+    background:rgba(59,42,68,.55);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    pointer-events:none;
+    transition:opacity .5s ease;
+  }
+  #hint.hide{opacity:0;}
+
+  /* ---------- 悬停 tooltip（桌面） ---------- */
+  #tip{
+    position:fixed;z-index:30;pointer-events:none;
+    padding:5px 10px;border-radius:8px;
+    font-size:12px;font-weight:600;color:#fff;
+    background:rgba(52,42,58,.9);
+    box-shadow:0 4px 14px rgba(0,0,0,.22);
+    opacity:0;transform:translate(-50%,-125%) scale(.96);
+    transition:opacity .14s ease, transform .14s ease;
+  }
+  #tip.show{opacity:1;transform:translate(-50%,-135%) scale(1);}
+
+  /* ---------- 节点 / 连线样式 ---------- */
+  .node{cursor:pointer;}
+  .node .halo{opacity:0;transition:opacity .18s ease;}
+  .node .ring{transition:stroke-width .18s ease, filter .18s ease;}
+  .node .name{font-size:14px;font-weight:700;fill:var(--ink);}
+  .node .role{font-size:11px;fill:var(--ink-dim);}
+  .link{stroke:var(--purple-soft);fill:none;stroke-linecap:round;}
+  .link.parent{stroke-width:1.9;}
+  .link.spouse{stroke-width:2.6;}
+  .link-label rect{fill:rgba(255,255,255,.86);}
+  .link-label text{font-size:11px;fill:#6d3b83;font-weight:600;}
+
+  #world{transition:none;}
+
+  /* ---------- 详情卡 ---------- */
+  #overlay{
+    position:fixed;inset:0;z-index:38;background:rgba(40,28,48,.34);
+    opacity:0;pointer-events:none;transition:opacity .28s ease;
+  }
+  #overlay.show{opacity:1;pointer-events:auto;}
+
+  #card{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:#fff;border-radius:20px 20px 0 0;
+    padding:10px 20px calc(env(safe-area-inset-bottom) + 22px);
+    box-shadow:0 -8px 30px rgba(60,35,75,.25);
+    transform:translateY(110%);
+    transition:transform .34s cubic-bezier(.22,.9,.3,1);
+    max-height:62vh;overflow-y:auto;
+  }
+  #card.show{transform:translateY(0);}
+  #card .grip{
+    width:40px;height:4px;border-radius:2px;background:#e3d9e8;
+    margin:0 auto 14px;
+  }
+  #card .head{display:flex;align-items:center;gap:14px;}
+  #card .avatar{flex:0 0 auto;width:64px;height:64px;}
+  #card .who{min-width:0;}
+  #card .who h2{margin:0 0 4px;font-size:20px;font-weight:800;color:var(--ink);}
+  #card .who .sub{font-size:13px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  #card .tag{
+    display:inline-block;padding:2px 9px;border-radius:999px;
+    font-size:11px;font-weight:600;color:#fff;background:var(--purple);
+  }
+  #card .tag.soft{background:#efe4f3;color:var(--purple);}
+  #card .relations{margin-top:16px;}
+  #card .relations h3{
+    margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:1px;
+    color:#a793b1;text-transform:uppercase;
+  }
+  #card .rel-row{
+    display:flex;align-items:baseline;gap:10px;
+    padding:9px 0;border-bottom:1px solid #f3eef6;
+  }
+  #card .rel-row:last-child{border-bottom:none;}
+  #card .rel-type{
+    flex:0 0 62px;font-size:11px;font-weight:700;color:var(--purple);
+  }
+  #card .rel-names{font-size:14px;color:var(--ink);line-height:1.5;}
+  #card .rel-names .muted{color:#b6a7bd;}
+</style>
+</head>
+<body>
+
+<svg id="scene" xmlns="http://www.w3.org/2000/svg">
+  <g id="world">
+    <g id="links"></g>
+    <g id="nodes"></g>
+  </g>
+</svg>
+
+<div id="topbar">
+  <div class="brand"><span class="dot"></span>陈氏家族图谱</div>
+  <div class="spacer"></div>
+  <button class="tool-btn" id="btnFit" aria-label="重置视图" title="重置视图">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12a9 9 0 1 0 3-6.7"/>
+      <path d="M3 4v5h5"/>
+    </svg>
+  </button>
+</div>
+
+<div id="hint">单指拖动平移 · 双指捏合缩放 · 点击头像查看详情</div>
+<div id="tip"></div>
+
+<div id="overlay"></div>
+<div id="card">
+  <div class="grip"></div>
+  <div class="head">
+    <div class="avatar" id="cardAvatar"></div>
+    <div class="who">
+      <h2 id="cardName"></h2>
+      <div class="sub">
+        <span class="tag" id="cardRole"></span>
+        <span class="tag soft" id="cardGen"></span>
+      </div>
+    </div>
+  </div>
+  <div class="relations">
+    <h3>亲属关系</h3>
+    <div id="cardRelations"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     1. 家族数据（虚构三代家族，可自由替换）
+     gen 仅用于初始布点与代际分层力
+     ========================================================= */
+  const NODES = [
+    { id:'p1', name:'陈鸿儒', role:'族长',   gen:1, gender:'m' },
+    { id:'p2', name:'林淑芬', role:'夫人',   gen:1, gender:'f' },
+
+    { id:'c1', name:'陈志远', role:'长子',   gen:2, gender:'m' },
+    { id:'s1', name:'苏婉清', role:'长媳',   gen:2, gender:'f' },
+    { id:'c2', name:'陈志玲', role:'长女',   gen:2, gender:'f' },
+    { id:'s2', name:'周建国', role:'女婿',   gen:2, gender:'m' },
+    { id:'c3', name:'陈志明', role:'次子',   gen:2, gender:'m' },
+    { id:'s3', name:'吴雅琴', role:'次媳',   gen:2, gender:'f' },
+
+    { id:'g1', name:'陈嘉禾', role:'长孙',   gen:3, gender:'m' },
+    { id:'g2', name:'陈嘉悦', role:'孙女',   gen:3, gender:'f' },
+    { id:'g3', name:'林思远', role:'外孙',   gen:3, gender:'m' },
+    { id:'g4', name:'陈嘉言', role:'孙子',   gen:3, gender:'m' },
+    { id:'g5', name:'陈嘉宁', role:'孙女',   gen:3, gender:'f' }
+  ];
+
+  const LINKS = [
+    { source:'p1', target:'p2', type:'spouse', label:'夫妻' },
+
+    { source:'c1', target:'s1', type:'spouse', label:'夫妻' },
+    { source:'c2', target:'s2', type:'spouse', label:'夫妻' },
+    { source:'c3', target:'s3', type:'spouse', label:'夫妻' },
+
+    { source:'p1', target:'c1', type:'parent', label:'长子' },
+    { source:'p1', target:'c2', type:'parent', label:'长女' },
+    { source:'p1', target:'c3', type:'parent', label:'次子' },
+
+    { source:'c1', target:'g1', type:'parent', label:'长子' },
+    { source:'c1', target:'g2', type:'parent', label:'女儿' },
+    { source:'c2', target:'g3', type:'parent', label:'儿子' },
+    { source:'c3', target:'g4', type:'parent', label:'儿子' },
+    { source:'c3', target:'g5', type:'parent', label:'女儿' }
+  ];
+
+  /* =========================================================
+     2. 程序化头像生成（零依赖：纯 SVG 简笔卡通头像）
+     ========================================================= */
+  const SKIN   = ['#f7d3b5','#f2c6a3','#fadcc2','#e8b894'];
+  const HAIR   = ['#3a2b23','#4a3226','#2f2620','#5b3a2a','#6b4a33'];
+  const SHIRT  = ['#4a90d9','#e8735f','#5cb85c','#c46bb8','#e2a83b','#5b6ee1','#3fae9e'];
+  const NODE_BG = ['#f6ecfa','#eaf2fc','#fdf0e9','#eaf8f0'];
+
+  function hash(str){
+    let h = 2166136261;
+    for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h,16777619); }
+    return Math.abs(h);
+  }
+
+  // 返回头像内部绘制内容（坐标基于 0,0 为圆心，半径 R）
+  function avatarMarkup(node, R){
+    const h = hash(node.id + node.name);
+    const skin  = SKIN[h % SKIN.length];
+    const hair  = HAIR[(h>>3) % HAIR.length];
+    const shirt = SHIRT[(h>>6) % SHIRT.length];
+    const bg    = NODE_BG[(h>>9) % NODE_BG.length];
+    const faceR = R*0.62;
+    const cy    = -R*0.12;
+    const fem   = node.gender === 'f';
+    const scale = R/26;
+    let s = '';
+
+    // 背景
+    s += `<circle r="${R}" fill="${bg}"/>`;
+
+    // 女性长发（在脸后）
+    if(fem){
+      s += `<path d="M ${-faceR*1.08} ${cy-faceR*0.1}
+                    C ${-faceR*1.22} ${cy+faceR*1.5} ${-faceR*0.95} ${R*0.92} ${-faceR*0.62} ${R*0.95}
+                    L ${faceR*0.62} ${R*0.95}
+                    C ${faceR*0.95} ${R*0.92} ${faceR*1.22} ${cy+faceR*1.5} ${faceR*1.08} ${cy-faceR*0.1} Z"
+                  fill="${hair}"/>`;
+    }
+
+    // 肩膀 / 衣服
+    s += `<path d="M ${-R*0.92} ${R*0.98}
+                  C ${-R*0.75} ${R*0.44} ${-R*0.36} ${R*0.30} 0 ${R*0.30}
+                  C ${R*0.36} ${R*0.30} ${R*0.75} ${R*0.44} ${R*0.92} ${R*0.98} Z"
+                fill="${shirt}"/>`;
+    // 领口
+    s += `<path d="M ${-R*0.24} ${R*0.32} L 0 ${R*0.55} L ${R*0.24} ${R*0.32}"
+                fill="none" stroke="rgba(255,255,255,.75)" stroke-width="${2.2*scale}" stroke-linejoin="round"/>`;
+
+    // 耳朵
+    s += `<circle cx="${-faceR}" cy="${cy}" r="${faceR*0.18}" fill="${skin}"/>`;
+    s += `<circle cx="${faceR}"  cy="${cy}" r="${faceR*0.18}" fill="${skin}"/>`;
+
+    // 脸
+    s += `<circle cx="0" cy="${cy}" r="${faceR}" fill="${skin}"/>`;
+
+    // 头发（男性/刘海）
+    if(!fem){
+      s += `<path d="M ${-faceR} ${cy-faceR*0.15}
+                    A ${faceR} ${faceR} 0 0 1 ${faceR} ${cy-faceR*0.15}
+                    L ${faceR} ${cy-faceR*0.42}
+                    A ${faceR} ${faceR} 0 0 0 ${-faceR} ${cy-faceR*0.42} Z"
+                  fill="${hair}"/>`;
+      s += `<path d="M ${-faceR*1.0} ${cy-faceR*0.22}
+                    C ${-faceR*0.7} ${cy-faceR*0.78} ${faceR*0.55} ${cy-faceR*0.94} ${faceR*0.98} ${cy-faceR*0.30}
+                    L ${faceR*0.98} ${cy-faceR*0.5} C ${faceR*0.4} ${cy-faceR*1.15} ${-faceR*0.8} ${cy-faceR*0.95} ${-faceR*1.02} ${cy-faceR*0.34} Z"
+                  fill="${hair}"/>`;
+    }else{
+      s += `<path d="M ${-faceR} ${cy-faceR*0.2}
+                    C ${-faceR*0.85} ${cy-faceR*0.95} ${faceR*0.5} ${cy-faceR*1.0} ${faceR} ${cy-faceR*0.25}
+                    L ${faceR} ${cy-faceR*0.55} C ${faceR*0.35} ${cy-faceR*1.2} ${-faceR*0.85} ${cy-faceR*1.0} ${-faceR*1.02} ${cy-faceR*0.4} Z"
+                  fill="${hair}"/>`;
+    }
+
+    // 眼睛
+    const eyeY = cy + faceR*0.05;
+    const eyeX = faceR*0.36;
+    s += `<circle cx="${-eyeX}" cy="${eyeY}" r="${faceR*0.10}" fill="#3a2b30"/>`;
+    s += `<circle cx="${eyeX}"  cy="${eyeY}" r="${faceR*0.10}" fill="#3a2b30"/>`;
+    s += `<circle cx="${-eyeX+faceR*0.03}" cy="${eyeY-faceR*0.04}" r="${faceR*0.035}" fill="#fff"/>`;
+    s += `<circle cx="${eyeX+faceR*0.03}"  cy="${eyeY-faceR*0.04}" r="${faceR*0.035}" fill="#fff"/>`;
+
+    // 腮红
+    s += `<circle cx="${-faceR*0.62}" cy="${cy+faceR*0.38}" r="${faceR*0.14}" fill="#f5a3a3" opacity=".5"/>`;
+    s += `<circle cx="${faceR*0.62}"  cy="${cy+faceR*0.38}" r="${faceR*0.14}" fill="#f5a3a3" opacity=".5"/>`;
+
+    // 微笑
+    s += `<path d="M ${-faceR*0.26} ${cy+faceR*0.46} Q 0 ${cy+faceR*0.72} ${faceR*0.26} ${cy+faceR*0.46}"
+                fill="none" stroke="#8a5a52" stroke-width="${2*scale}" stroke-linecap="round"/>`;
+
+    return s;
+  }
+
+  function buildAvatarSVG(node, R, uid){
+    return `<svg class="avatar-svg" viewBox="${-R} ${-R} ${R*2} ${R*2}" width="${R*2}" height="${R*2}">
+      <defs><clipPath id="clip-${uid}"><circle r="${R}"/></clipPath></defs>
+      <g clip-path="url(#clip-${uid})">${avatarMarkup(node, R)}</g>
+    </svg>`;
+  }
+
+  // 把 SVG 标记字符串转成真正的 SVG 节点（避免依赖 foreignObject）
+  function svgFragment(markup){
+    const doc = new DOMParser().parseFromString(
+      `<svg xmlns="${SVG_NS}">${markup}</svg>`, 'image/svg+xml');
+    const frag = document.createDocumentFragment();
+    Array.from(doc.documentElement.childNodes).forEach(c =>
+      frag.appendChild(document.importNode(c, true)));
+    return frag;
+  }
+
+  /* =========================================================
+     3. 初始化节点坐标（按代际预置，加速收敛）
+     ========================================================= */
+  const R_NODE = 26;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const GEN_Y = { 1:-190, 2:10, 3:210 };
+
+  const nodes = NODES.map(n => ({ ...n, x:0, y:0, vx:0, vy:0, pinned:false }));
+  const byId = {};
+  nodes.forEach(n => byId[n.id] = n);
+
+  // 同代横向展开
+  (function seedPositions(){
+    const groups = {};
+    nodes.forEach(n => (groups[n.gen] = groups[n.gen] || []).push(n));
+    Object.keys(groups).forEach(g => {
+      const arr = groups[g];
+      const span = 150;
+      const startX = -(arr.length - 1) * span / 2;
+      arr.forEach((n, i) => {
+        n.x = startX + i * span + (hash(n.id)%40 - 20);
+        n.y = GEN_Y[n.gen] + (hash(n.id)%60 - 30);
+      });
+    });
+  })();
+
+  const links = LINKS.map(l => ({
+    ...l,
+    s: byId[l.source],
+    t: byId[l.target]
+  }));
+
+  // 亲属邻居表（夫妻 + 亲子），交叉避让时用于把节点拉向亲属中心
+  const kinOf = {};
+  nodes.forEach(n => kinOf[n.id] = []);
+  links.forEach(l => {
+    kinOf[l.s.id].push(l.t.id);
+    kinOf[l.t.id].push(l.s.id);
+  });
+
+  /* =========================================================
+     4. 构建 SVG DOM
+     ========================================================= */
+  const svg      = document.getElementById('scene');
+  const world    = document.getElementById('world');
+  const gLinks   = document.getElementById('links');
+  const gNodes   = document.getElementById('nodes');
+
+  const linkEls = links.map(l => {
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('class', 'link ' + l.type);
+    gLinks.appendChild(line);
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'link-label');
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('rx', 6);
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.textContent = l.label;
+    g.appendChild(rect);
+    g.appendChild(text);
+    gLinks.appendChild(g);
+
+    const w = l.label.length * 11 + 12, hh = 18;
+    rect.setAttribute('width', w);
+    rect.setAttribute('height', hh);
+    rect.setAttribute('x', -w/2);
+    rect.setAttribute('y', -hh/2);
+
+    return { line, group:g };
+  });
+
+  const nodeEls = nodes.map(n => {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'node');
+    g.dataset.id = n.id;
+
+    const halo = document.createElementNS(SVG_NS, 'circle');
+    halo.setAttribute('class', 'halo');
+    halo.setAttribute('r', R_NODE + 9);
+    halo.setAttribute('fill', 'none');
+    halo.setAttribute('stroke', '#7d3c98');
+    halo.setAttribute('stroke-width', 2);
+    halo.setAttribute('stroke-opacity', .45);
+
+    const fo = document.createElementNS(SVG_NS, 'g');
+    fo.setAttribute('class', 'avatar');
+    const clip = document.createElementNS(SVG_NS, 'clipPath');
+    clip.setAttribute('id', 'clip-' + n.id);
+    const clipCircle = document.createElementNS(SVG_NS, 'circle');
+    clipCircle.setAttribute('r', R_NODE);
+    clip.appendChild(clipCircle);
+    fo.appendChild(clip);
+    const clipG = document.createElementNS(SVG_NS, 'g');
+    clipG.setAttribute('clip-path', `url(#clip-${n.id})`);
+    clipG.appendChild(svgFragment(avatarMarkup(n, R_NODE)));
+    fo.appendChild(clipG);
+
+    const ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('class', 'ring');
+    ring.setAttribute('r', R_NODE);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#7d3c98');
+    ring.setAttribute('stroke-width', 3);
+
+    const name = document.createElementNS(SVG_NS, 'text');
+    name.setAttribute('class', 'name');
+    name.setAttribute('text-anchor', 'middle');
+    name.setAttribute('y', R_NODE + 17);
+    name.textContent = n.name;
+
+    const role = document.createElementNS(SVG_NS, 'text');
+    role.setAttribute('class', 'role');
+    role.setAttribute('text-anchor', 'middle');
+    role.setAttribute('y', R_NODE + 32);
+    role.textContent = n.role;
+
+    g.appendChild(halo);
+    g.appendChild(fo);
+    g.appendChild(ring);
+    g.appendChild(name);
+    g.appendChild(role);
+
+    gNodes.appendChild(g);
+    return { g, halo, ring };
+  });
+
+  /* =========================================================
+     5. 力导向布局
+     ========================================================= */
+  const REPULSION   = 12000;
+  const LINK_LEN    = { spouse: 96, parent: 158 };
+  const SPRING      = 0.028;
+  const CENTER_PULL = 0.0022;
+  const GEN_PULL    = 0.014;
+  const DAMPING     = 0.72;
+  const MIN_DIST    = 82;
+
+  const BARY_AVOID        = 0.06;   // 出现交叉时，把节点在 x 方向拉向亲属中心的强度
+  const CROSS_ALPHA_FLOOR = 0.12;   // 存在交叉时维持的最小活动量
+  const CROSS_MAX_TICKS   = 900;    // 避让最多持续帧数，防止无解时一直抖动
+
+  let alpha = 1;
+  const ALPHA_DECAY = 0.9825;
+  let crossTicks = 0;
+
+  // 线段严格相交判定（共线、端点相接不算交叉）
+  function ccw(ax, ay, bx, by, cx, cy){
+    return (cy - ay) * (bx - ax) - (by - ay) * (cx - ax);
+  }
+  function segCross(ax, ay, bx, by, cx, cy, dx, dy){
+    const d1 = ccw(cx, cy, dx, dy, ax, ay);
+    const d2 = ccw(cx, cy, dx, dy, bx, by);
+    const d3 = ccw(ax, ay, bx, by, cx, cy);
+    const d4 = ccw(ax, ay, bx, by, dx, dy);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+           ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  }
+
+  function tick(){
+    // 斥力
+    for(let i=0;i<nodes.length;i++){
+      const a = nodes[i];
+      for(let j=i+1;j<nodes.length;j++){
+        const b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d2 = dx*dx + dy*dy;
+        if(d2 < 1) { dx = (Math.random()-.5); dy = (Math.random()-.5); d2 = 1; }
+        const d = Math.sqrt(d2);
+        let f = (REPULSION * alpha) / d2;
+        if(d < MIN_DIST) f += (MIN_DIST - d) * 0.55;      // 硬性防重叠
+        const fx = f * dx / d, fy = f * dy / d;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+    }
+
+    // 弹簧（连线）
+    links.forEach(l => {
+      let dx = l.t.x - l.s.x, dy = l.t.y - l.s.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
+      const target = LINK_LEN[l.type] || 130;
+      const f = (d - target) * SPRING * alpha;
+      const fx = f * dx / d, fy = f * dy / d;
+      if(!l.s.pinned){ l.s.vx += fx; l.s.vy += fy; }
+      if(!l.t.pinned){ l.t.vx -= fx; l.t.vy -= fy; }
+    });
+
+    // 边交叉避让：一旦出现交叉，把每个节点在 x 方向拉向「亲属中心」。
+    // 该力会让子女回到父母下方、配偶左右对齐，交叉自然解开；
+    // 无交叉时不施加，保持力导向布局原本舒展的形态。
+    let crossings = 0;
+    for(let i=0;i<links.length;i++){
+      const A = links[i];
+      for(let j=i+1;j<links.length;j++){
+        const B = links[j];
+        if(A.s === B.s || A.s === B.t || A.t === B.s || A.t === B.t) continue;
+        if(segCross(A.s.x, A.s.y, A.t.x, A.t.y, B.s.x, B.s.y, B.t.x, B.t.y)) crossings++;
+      }
+    }
+    if(crossings > 0 && crossTicks < CROSS_MAX_TICKS){
+      nodes.forEach(n => {
+        const nb = kinOf[n.id];
+        if(!nb.length) return;
+        let sx = 0;
+        for(let k=0;k<nb.length;k++) sx += byId[nb[k]].x;
+        n.vx += (sx/nb.length - n.x) * BARY_AVOID * alpha;
+      });
+      // 只要还存在交叉，就维持一定活动量，让布局继续解缠
+      alpha = Math.max(alpha, CROSS_ALPHA_FLOOR);
+      crossTicks++;
+    } else if(crossings === 0){
+      crossTicks = 0;
+    }
+
+    // 向心力 + 代际分层力 + 积分
+    nodes.forEach(n => {
+      if(n.pinned){ n.vx = 0; n.vy = 0; return; }
+      n.vx += -n.x * CENTER_PULL * alpha;
+      n.vy += (GEN_Y[n.gen] - n.y) * GEN_PULL * alpha;
+      n.vx *= DAMPING; n.vy *= DAMPING;
+      n.x += n.vx; n.y += n.vy;
+    });
+
+    alpha *= ALPHA_DECAY;
+    if(alpha < 0.004) alpha = 0.004;   // 保留极弱活动，拖动后仍微调
+  }
+
+  /* =========================================================
+     6. 渲染
+     ========================================================= */
+  let view = { k:0.62 };               // 缩放：viewBox 宽高 = 屏幕尺寸 / k
+  let center = { x:0, y:0 };           // 世界坐标中的视图中心
+
+  // 统一的画布尺寸读取：多重回退 + 兜底，避免 0/NaN 导致 viewBox 计算失败
+  function metrics(){
+    const r = svg.getBoundingClientRect();
+    let W = r.width, H = r.height;
+    if(!(W > 0)) W = svg.clientWidth;
+    if(!(H > 0)) H = svg.clientHeight;
+    if(!(W > 0)) W = window.innerWidth;
+    if(!(H > 0)) H = window.innerHeight;
+    return {
+      W: (W > 0) ? W : 1,
+      H: (H > 0) ? H : 1,
+      left: r.left || 0,
+      top:  r.top  || 0
+    };
+  }
+
+  function renderView(){
+    const m = metrics();
+    const vw = m.W/view.k, vh = m.H/view.k;
+    svg.setAttribute('viewBox', `${center.x - vw/2} ${center.y - vh/2} ${vw} ${vh}`);
+  }
+
+  function render(){
+    // 连线
+    links.forEach((l, i) => {
+      const e = linkEls[i];
+      e.line.setAttribute('x1', l.s.x);
+      e.line.setAttribute('y1', l.s.y);
+      e.line.setAttribute('x2', l.t.x);
+      e.line.setAttribute('y2', l.t.y);
+
+      const mx = (l.s.x + l.t.x)/2, my = (l.s.y + l.t.y)/2;
+      let ang = Math.atan2(l.t.y - l.s.y, l.t.x - l.s.x) * 180/Math.PI;
+      if(ang > 90) ang -= 180;
+      if(ang < -90) ang += 180;
+      e.group.setAttribute('transform', `translate(${mx},${my}) rotate(${ang})`);
+    });
+
+    // 节点
+    nodes.forEach((n, i) => {
+      const e = nodeEls[i];
+      e.g.setAttribute('transform', `translate(${n.x},${n.y})`);
+    });
+  }
+
+  /* =========================================================
+     7. 视图适配 / 重置
+     ========================================================= */
+  function contentBounds(){
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    nodes.forEach(n => {
+      minX = Math.min(minX, n.x - R_NODE - 30);
+      maxX = Math.max(maxX, n.x + R_NODE + 30);
+      minY = Math.min(minY, n.y - R_NODE - 34);
+      maxY = Math.max(maxY, n.y + R_NODE + 56);
+    });
+    return { minX, minY, maxX, maxY };
+  }
+
+  function fitView(animate){
+    const b = contentBounds();
+    const m = metrics();
+    const padX = 40, padTop = 90, padBottom = 70;
+    const bw = Math.max(60, b.maxX - b.minX) || 60;
+    const bh = Math.max(60, b.maxY - b.minY) || 60;
+    const kx = (m.W - padX*2) / bw;
+    const ky = (m.H - padTop - padBottom) / bh;
+    let k = Math.min(kx, ky);
+    if(!(k > 0)) k = 0.6;                                   // 视口异常时兜底
+    k = Math.max(0.28, Math.min(1.3, k));
+
+    const cx = (b.minX + b.maxX)/2 || 0;
+    // 上下留白不等，内容中心需下移 (padTop-padBottom)/2 个屏幕像素
+    const cy = ((b.minY + b.maxY)/2 || 0) - (padTop - padBottom)/(2*k);
+
+    if(!animate){
+      view.k = k; center.x = cx; center.y = cy; renderView(); return;
+    }
+    animateView(k, cx, cy);
+  }
+
+  let animRAF = null;
+  function animateView(tk, tx, ty){
+    if(animRAF) cancelAnimationFrame(animRAF);
+    const s = { k:view.k, cx:center.x, cy:center.y };
+    const t0 = performance.now(), dur = 480;
+    const ease = t => 1 - Math.pow(1-t, 3);
+    (function step(now){
+      const p = Math.min(1, (now - t0)/dur);
+      const e = ease(p);
+      view.k   = s.k  + (tk - s.k) * e;
+      center.x = s.cx + (tx - s.cx) * e;
+      center.y = s.cy + (ty - s.cy) * e;
+      renderView();
+      if(p < 1) animRAF = requestAnimationFrame(step);
+    })(t0);
+  }
+
+  /* =========================================================
+     8. 交互：平移 / 缩放 / 拖拽节点 / 点击
+     ========================================================= */
+  const pointers = new Map();
+  let dragNode = null;
+  let pinch = null;
+  let panStart = null;
+  let moved = false;
+  let downNodeId = null;
+
+  function toWorld(clientX, clientY){
+    const m = metrics();
+    const vw = m.W/view.k, vh = m.H/view.k;
+    return {
+      x: (center.x - vw/2) + (clientX - m.left) * (vw/m.W),
+      y: (center.y - vh/2) + (clientY - m.top)  * (vh/m.H)
+    };
+  }
+
+  function updateHint(){
+    document.getElementById('hint').classList.add('hide');
+  }
+
+  svg.addEventListener('pointerdown', e => {
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY });
+    try { svg.setPointerCapture(e.pointerId); } catch(_) { /* 部分环境不支持捕获 */ }
+    svg.classList.add('dragging');
+    moved = false;
+
+    if(pointers.size === 1){
+      const nodeG = e.target.closest && e.target.closest('.node');
+      downNodeId = nodeG ? nodeG.dataset.id : null;
+      dragNode = downNodeId ? byId[downNodeId] : null;
+      if(dragNode){
+        dragNode.pinned = true;
+        alpha = Math.max(alpha, 0.5);
+      }
+      panStart = { cx:center.x, cy:center.y, px:e.clientX, py:e.clientY };
+    } else if(pointers.size === 2){
+      const pts = [...pointers.values()];
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinch = { d, k:view.k, mid:{ x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 }, center:{...center} };
+      dragNode = null;
+      moved = true;   // 双指手势不触发节点选中
+    }
+    e.preventDefault();
+  }, { passive:false });
+
+  svg.addEventListener('pointermove', e => {
+    if(!pointers.has(e.pointerId)) return;
+    const p = pointers.get(e.pointerId);
+    p.x = e.clientX; p.y = e.clientY;
+    if(Math.hypot(p.x - p.sx, p.y - p.sy) > 6) moved = true;
+
+    if(pointers.size === 1 && dragNode){
+      const w = toWorld(e.clientX, e.clientY);
+      dragNode.x = w.x; dragNode.y = w.y;
+      dragNode.vx = 0; dragNode.vy = 0;
+      alpha = Math.max(alpha, 0.35);
+    } else if(pointers.size === 1 && panStart){
+      center.x = panStart.cx - (e.clientX - panStart.px) / view.k;
+      center.y = panStart.cy - (e.clientY - panStart.py) / view.k;
+      renderView();
+    } else if(pointers.size === 2 && pinch){
+      const pts = [...pointers.values()];
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const midX = (pts[0].x + pts[1].x)/2, midY = (pts[0].y + pts[1].y)/2;
+      let nk = pinch.k * (d / (pinch.d || 1));
+      nk = Math.max(0.22, Math.min(3, nk));
+      const m = metrics();
+      // 以初始双指中点对应的世界坐标为锚点，缩放后保持该点不漂移
+      const vw0 = m.W/pinch.k, vh0 = m.H/pinch.k;
+      const wx = (pinch.center.x - vw0/2) + (pinch.mid.x - m.left) * (vw0/m.W);
+      const wy = (pinch.center.y - vh0/2) + (pinch.mid.y - m.top)  * (vh0/m.H);
+      const vw1 = m.W/nk, vh1 = m.H/nk;
+      center.x = wx - (midX - m.left) * (vw1/m.W) + vw1/2;
+      center.y = wy - (midY - m.top)  * (vh1/m.H) + vh1/2;
+      view.k = nk;
+      renderView();
+    }
+    e.preventDefault();
+  }, { passive:false });
+
+  function endPointer(e){
+    if(!pointers.has(e.pointerId)) return;
+    const p = pointers.get(e.pointerId);
+    pointers.delete(e.pointerId);
+
+    if(pointers.size === 0){
+      svg.classList.remove('dragging');
+      if(dragNode){
+        dragNode.pinned = false;
+        alpha = Math.max(alpha, 0.28);
+      }
+      // 判定点击（pointer capture 会使 e.target 变为 svg，故用 pointerdown 记录的目标）
+      if(!moved){
+        if(downNodeId){ selectNode(downNodeId); }
+        else { closeCard(); clearHighlight(); }
+      }
+      dragNode = null; panStart = null; pinch = null; downNodeId = null;
+      updateHint();
+    } else if(pointers.size === 1){
+      pinch = null;
+      const rest = [...pointers.values()][0];
+      panStart = { cx:center.x, cy:center.y, px:rest.x, py:rest.y };
+    }
+  }
+  svg.addEventListener('pointerup', endPointer);
+  svg.addEventListener('pointercancel', endPointer);
+
+  // 滚轮缩放（桌面）
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const m = metrics();
+    const factor = Math.exp(-e.deltaY * 0.0016);
+    let nk = Math.max(0.22, Math.min(3, view.k * factor));
+    const vw0 = m.W/view.k, vh0 = m.H/view.k;
+    const wx = (center.x - vw0/2) + (e.clientX - m.left) * (vw0/m.W);
+    const wy = (center.y - vh0/2) + (e.clientY - m.top)  * (vh0/m.H);
+    const vw1 = m.W/nk, vh1 = m.H/nk;
+    center.x = wx - (e.clientX - m.left) * (vw1/m.W) + vw1/2;
+    center.y = wy - (e.clientY - m.top)  * (vh1/m.H) + vh1/2;
+    view.k = nk;
+    renderView();
+  }, { passive:false });
+
+  /* =========================================================
+     9. 高亮
+     ========================================================= */
+  const neighbors = {};
+  nodes.forEach(n => neighbors[n.id] = new Set([n.id]));
+  links.forEach(l => { neighbors[l.source].add(l.target); neighbors[l.target].add(l.source); });
+
+  function setHighlight(id){
+    nodes.forEach((n, i) => {
+      const on = neighbors[id].has(n.id);
+      nodeEls[i].g.style.opacity = on ? 1 : 0.22;
+      nodeEls[i].halo.style.opacity = (n.id === id) ? 1 : 0;
+      nodeEls[i].ring.setAttribute('stroke-width', n.id === id ? 5 : 3);
+    });
+    links.forEach((l, i) => {
+      const on = (l.source === id || l.target === id);
+      linkEls[i].line.style.opacity = on ? 1 : 0.12;
+      linkEls[i].group.style.opacity = on ? 1 : 0.12;
+    });
+  }
+  function clearHighlight(){
+    nodes.forEach((n, i) => {
+      nodeEls[i].g.style.opacity = 1;
+      nodeEls[i].halo.style.opacity = 0;
+      nodeEls[i].ring.setAttribute('stroke-width', 3);
+    });
+    links.forEach((l, i) => {
+      linkEls[i].line.style.opacity = 1;
+      linkEls[i].group.style.opacity = 1;
+    });
+  }
+
+  /* =========================================================
+     10. 详情卡
+     ========================================================= */
+  const overlay = document.getElementById('overlay');
+  const card    = document.getElementById('card');
+  let currentId = null;
+
+  function relOf(id){
+    const spouse = [], parents = [], children = [];
+    links.forEach(l => {
+      const isS = l.source === id, isT = l.target === id;
+      if(!isS && !isT) return;
+      const other = byId[isS ? l.target : l.source];
+      if(l.type === 'spouse') spouse.push({ n:other, label:l.label });
+      else if(l.type === 'parent'){
+        if(isS) children.push({ n:other, label:l.label });
+        else parents.push({ n:other, label:l.label });
+      }
+    });
+    return { spouse, parents, children };
+  }
+
+  function selectNode(id){
+    currentId = id;
+    const n = byId[id];
+    document.getElementById('cardAvatar').innerHTML = buildAvatarSVG(n, 32, 'card-' + id);
+    document.getElementById('cardName').textContent = n.name;
+    document.getElementById('cardRole').textContent = n.role;
+    document.getElementById('cardGen').textContent = '第 ' + n.gen + ' 代';
+
+    const r = relOf(id);
+    const rows = [];
+    if(r.spouse.length)   rows.push(['配偶', r.spouse.map(x=>x.n.name).join('、')]);
+    if(r.parents.length)  rows.push(['长辈', r.parents.map(x=>x.n.name).join('、')]);
+    if(r.children.length) rows.push(['子女', r.children.map(x=>x.n.name + '（' + x.label + '）').join('、')]);
+    if(!rows.length)      rows.push(['关系', '<span class="muted">暂无记录</span>']);
+
+    document.getElementById('cardRelations').innerHTML = rows.map(([k, v]) =>
+      `<div class="rel-row"><div class="rel-type">${k}</div><div class="rel-names">${v}</div></div>`
+    ).join('');
+
+    overlay.classList.add('show');
+    card.classList.add('show');
+    setHighlight(id);
+    updateHint();
+  }
+
+  function closeCard(){
+    card.classList.remove('show');
+    overlay.classList.remove('show');
+    currentId = null;
+  }
+
+  overlay.addEventListener('click', () => { closeCard(); clearHighlight(); });
+
+  // 卡片内点击不冒泡到 overlay（overlay 与 card 同级，无需处理）
+
+  /* =========================================================
+     11. 桌面 hover tooltip
+     ========================================================= */
+  const tip = document.getElementById('tip');
+  gNodes.addEventListener('pointerover', e => {
+    const g = e.target.closest && e.target.closest('.node');
+    if(!g) return;
+    const n = byId[g.dataset.id];
+    tip.textContent = n.name;
+    const m = metrics();
+    const vw = m.W/view.k, vh = m.H/view.k;
+    const sx = m.left + (n.x - (center.x - vw/2)) * (m.W/vw);
+    const sy = m.top  + (n.y - (center.y - vh/2)) * (m.H/vh);
+    tip.style.left = sx + 'px';
+    tip.style.top  = (sy - R_NODE) + 'px';
+    tip.classList.add('show');
+  });
+  gNodes.addEventListener('pointerout', e => {
+    const g = e.target.closest && e.target.closest('.node');
+    if(g) tip.classList.remove('show');
+  });
+  svg.addEventListener('pointerdown', () => tip.classList.remove('show'));
+
+  /* =========================================================
+     12. 重置按钮 & 启动
+     ========================================================= */
+  document.getElementById('btnFit').addEventListener('click', () => {
+    closeCard(); clearHighlight();
+    // 重播布局：随机微扰后重新升温
+    nodes.forEach(n => { if(!n.pinned){ n.vx += (Math.random()-.5)*2; n.vy += (Math.random()-.5)*2; } });
+    alpha = 1;
+    crossTicks = 0;   // 重置交叉避让预算
+    setTimeout(() => fitView(true), 500);
+  });
+
+  window.addEventListener('resize', () => { renderView(); });
+
+  // 启动：先立即适配一次，待布局收敛后再平滑重新取景
+  view.k = 0.6; center.x = 0; center.y = 0;
+  renderView();
+
+  let frames = 0;
+  (function boot(){
+    tick(); render();
+    frames++;
+    if(frames === 45)  fitView(false);   // 立即取景，保证首屏可见
+    if(frames === 170) fitView(true);    // 收敛后平滑重新取景
+    requestAnimationFrame(boot);
+  })();
+
+  // 提示条自动隐藏
+  setTimeout(() => document.getElementById('hint').classList.add('hide'), 6000);
+
+})();
+</script>
+</body>
+</html>

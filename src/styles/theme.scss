@@ -1,0 +1,36 @@
+// ============================================
+// 主题配色变量（名片图谱 · 淡紫家族风，取自 index.html demo）
+// ============================================
+
+// 品牌主题色：根据产品品牌定位修改
+$color-primary: #7d3c98;
+$color-primary-light: #9b6bb0;
+$color-primary-dark: #5e2d75;
+
+// 功能色
+$color-success: #00b42a;
+$color-warning: #ff7d00;
+$color-error: #f53f3f;
+$color-info: #7d3c98;
+
+// 背景色
+$color-bg-page: #f7f2f9;
+$color-bg-card: #ffffff;
+$color-bg-hover: #f2ecf6;
+
+// 文本色（取自 demo：#3b2a44 / #6d5a78）
+$color-text-primary: #3b2a44;
+$color-text-secondary: #6d5a78;
+$color-text-tertiary: #a793b1;
+$color-text-disabled: #d3c6da;
+$color-text-white: #ffffff;
+
+// 边框色
+$color-border: #e8dcef;
+$color-divider: #f3edf6;
+
+// 业务色（图谱画布相关，S4 图谱页使用）
+$color-canvas: #d9c9dd;        // 图谱画布背景
+$color-link: #8e44ad;          // 关系连线紫
+$color-avatar-ring: #7d3c98;   // 节点头像描边
+$color-tag-bg: #efe4f3;        // 关系标签底色

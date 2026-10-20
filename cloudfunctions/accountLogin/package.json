@@ -1,0 +1,9 @@
+{
+  "name": "accountLogin",
+  "version": "1.0.0",
+  "description": "平台审核用账号密码登录：验证后把演示账号数据复制到审核者名下",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

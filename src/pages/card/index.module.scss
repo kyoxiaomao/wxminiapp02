@@ -1,0 +1,288 @@
+@use '@/styles/variables.scss' as *;
+
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: $color-bg-page;
+}
+
+/* ---------- 顶部：标题 + 搜索 ---------- */
+.header {
+  padding: $spacing-md $page-padding $spacing-lg;
+  background: linear-gradient(180deg, #efe2f4 0%, $color-bg-page 100%);
+}
+
+.headerTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.title {
+  font-size: $font-size-xxl;
+  font-weight: $font-weight-bold;
+  color: $color-primary-dark;
+}
+
+.count {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.body {
+  flex: 1;
+  padding: 0 $page-padding $spacing-xl;
+}
+
+/* ---------- 我的名片入口 ---------- */
+.myEntry {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  padding: $spacing-md;
+  margin-bottom: $spacing-md;
+  border-radius: $radius-lg;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  box-shadow: $shadow-card;
+  transition: opacity $transition-fast;
+}
+
+.myEntry:active {
+  opacity: 0.85;
+}
+
+.myInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.myName {
+  display: block;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-white;
+}
+
+.myLabel {
+  display: block;
+  margin-top: 4rpx;
+  font-size: $font-size-xs;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.chevron {
+  font-size: $font-size-xl;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ---------- 名片列表 ---------- */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.sectionTitle {
+  margin: $spacing-sm 0;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  color: $color-text-tertiary;
+}
+
+.sectionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sortRow {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.sortBtn {
+  padding: 4rpx 16rpx;
+  border-radius: $radius-round;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  background: $color-bg-page;
+  white-space: nowrap;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.sortBtnActive {
+  color: $color-text-white;
+  background: $color-primary;
+}
+
+/* 左滑删除容器：裁剪圆角，删除区常驻右侧底层 */
+.swipeWrap {
+  position: relative;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  box-shadow: $shadow-card;
+}
+
+.swipeDelete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 128rpx;
+  background: #f53f3f;
+}
+
+.swipeDeleteText {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-white;
+}
+
+/* 松手后的回弹/展开动画（拖动中关闭以保证跟手） */
+.cardItemAnim {
+  transition: transform 0.2s ease-out;
+}
+
+.cardItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  min-height: 88rpx;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+}
+
+/* 模板色条（颜色由内联 style 提供） */
+.tplStripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6rpx;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  /* 单行内联排列，超出省略 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: $font-size-md;
+}
+
+.name {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.meta {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.phone {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.meTag {
+  flex: 0 0 auto;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-round;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+  background: $color-tag-bg;
+}
+
+/* 活名片「有更新」未读红点（微信未读角标风格，名片条右上角） */
+.dot {
+  position: absolute;
+  top: 6rpx;
+  right: 8rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: $radius-round;
+  background: $color-error;
+  border: 2rpx solid $color-bg-card;
+  box-shadow: 0 2rpx 6rpx rgba(245, 63, 63, 0.4);
+}
+
+.itemChevron {
+  flex: 0 0 auto;
+  font-size: $font-size-xl;
+  color: $color-text-disabled;
+}
+
+// ---------- 关联模式（图谱节点关联名片） ----------
+.linkTip {
+  margin-bottom: $spacing-md;
+  padding: 14rpx 24rpx;
+  border-radius: $radius-md;
+  background: $color-tag-bg;
+}
+
+.linkTipText {
+  font-size: $font-size-sm;
+  color: $color-primary;
+}
+
+.linkBtn {
+  flex: 0 0 auto;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-tag-bg;
+
+  &:active {
+    background: #e2cdea;
+  }
+}
+
+.linkBtnIcon {
+  font-size: 30rpx;
+}
+
+/* ---------- 新建悬浮按钮 ---------- */
+.fab {
+  position: fixed;
+  right: $spacing-lg;
+  bottom: calc(env(safe-area-inset-bottom) + $spacing-xl);
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  box-shadow: $shadow-float;
+  transition: transform $transition-fast;
+}
+
+.fab:active {
+  transform: scale(0.92);
+}
+
+.fabIcon {
+  font-size: 52rpx;
+  font-weight: $font-weight-normal;
+  color: $color-text-white;
+  line-height: 1;
+  margin-top: -4rpx;
+}

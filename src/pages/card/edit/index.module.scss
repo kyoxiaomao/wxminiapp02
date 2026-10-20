@@ -1,0 +1,390 @@
+@use '@/styles/variables.scss' as *;
+
+.container {
+  min-height: 100vh;
+  padding: $spacing-md $page-padding calc(env(safe-area-inset-bottom) + 140rpx);
+  background: $color-bg-page;
+}
+
+/* ---------- 主卡片（与详情页一致） ---------- */
+.mainCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: $spacing-lg $spacing-lg;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-card;
+}
+
+// 头部：头像靠左 / 信息靠右
+.head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: $spacing-lg;
+  width: 100%;
+}
+
+.headInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.avatarWrap {
+  position: relative;
+}
+
+.avatarEdit {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  padding: 4rpx 16rpx;
+  border-radius: $radius-round;
+  font-size: 20rpx;
+  color: $color-text-white;
+  background: rgba(59, 42, 68, 0.55);
+  white-space: nowrap;
+}
+
+.avatarEditText {
+  font-size: 20rpx;
+  color: $color-text-white;
+  line-height: 1.4;
+}
+
+.nameInput {
+  width: 100%;
+  height: 60rpx;
+  font-size: $font-size-xl;
+  font-weight: $font-weight-bold;
+  color: $color-text-primary;
+  text-align: left;
+}
+
+// 称谓（可编辑，下划线输入样式，左对齐）
+.jobRow {
+  margin-top: 4rpx;
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.jobLabel {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.jobInput {
+  width: 220rpx;
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+  text-align: left;
+  padding-bottom: 6rpx;
+  border-bottom: 2rpx solid $color-border;
+}
+
+/* ---------- 右上角模板下拉 ---------- */
+.tplDropdown {
+  position: absolute;
+  top: $spacing-sm;
+  right: $spacing-sm;
+  z-index: 60;
+}
+
+.tplBtn {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 6rpx 16rpx;
+  border-radius: $radius-round;
+  background: $color-tag-bg;
+}
+
+.tplBtnText {
+  font-size: 22rpx;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.tplBtnArrow {
+  font-size: 18rpx;
+  color: $color-primary;
+  line-height: 1;
+}
+
+.tplMenu {
+  position: absolute;
+  top: calc(100% + 8rpx);
+  right: 0;
+  min-width: 200rpx;
+  padding: $spacing-xs 0;
+  border-radius: $radius-md;
+  background: $color-bg-card;
+  box-shadow: $shadow-float;
+}
+
+.tplMenuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  padding: $spacing-sm $spacing-lg;
+}
+
+.tplMenuItemActive {
+  background: $color-tag-bg;
+}
+
+.tplMenuItemText {
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.tplMenuItemActive .tplMenuItemText {
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.tplMenuCheck {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+/* 下拉展开时的全屏透明遮罩（点击空白收起） */
+.tplMask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: transparent;
+}
+
+/* ---------- 信息行 ---------- */
+.section {
+  margin-top: $spacing-md;
+  padding: $spacing-sm $spacing-lg;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-card;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md 0;
+  border-bottom: 1rpx solid $color-divider;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowIcon {
+  width: 44rpx;
+  font-size: $font-size-lg;
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.input {
+  margin-top: 2rpx;
+  width: 100%;
+  height: 48rpx;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}
+
+.placeholder {
+  color: $color-text-disabled;
+}
+
+/* 自定义字段删除角标 */
+.fieldRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: $color-bg-hover;
+}
+
+.fieldRemoveText {
+  font-size: 28rpx;
+  color: $color-text-tertiary;
+  line-height: 1;
+}
+
+/* 添加自定义字段 */
+.addFieldRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-md 0;
+  border-radius: $radius-md;
+  border: 2rpx dashed $color-border;
+  margin: $spacing-sm 0;
+}
+
+.addFieldText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md 0;
+}
+
+.addRowInput {
+  flex: 1;
+  height: 64rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  background: $color-bg-page;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.addRowOk {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.addRowCancel {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+/* ---------- 照片 ---------- */
+.photoGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  padding: $spacing-md 0;
+}
+
+.photoWrap {
+  position: relative;
+}
+
+.photo {
+  display: block;
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: $radius-md;
+}
+
+.photoRemove {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: rgba(59, 42, 68, 0.7);
+}
+
+.photoRemoveText {
+  font-size: 28rpx;
+  color: $color-text-white;
+  line-height: 1;
+}
+
+.photoAdd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: $radius-md;
+  border: 2rpx dashed $color-border;
+  background: $color-bg-page;
+}
+
+.photoAddText {
+  font-size: 56rpx;
+  font-weight: 300;
+  color: $color-text-tertiary;
+  line-height: 1;
+}
+
+/* ---------- 备注 ---------- */
+.noteInput {
+  width: 100%;
+  min-height: 120rpx;
+  padding: $spacing-sm 0 $spacing-md;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+  box-sizing: border-box;
+}
+
+/* ---------- 底部操作栏 ---------- */
+.actionBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: $spacing-md;
+  padding: $spacing-md $page-padding calc(env(safe-area-inset-bottom) + $spacing-md);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: $shadow-float;
+}
+
+.actionBtn {
+  flex: 1;
+  height: $button-height-md;
+  border-radius: $radius-button;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  transition: opacity $transition-fast, transform $transition-fast;
+}
+
+.actionBtn:active {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+
+.saveBtn {
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  color: $color-text-white;
+}
+
+.saveBtnDisabled {
+  opacity: 0.5;
+}
+
+.deleteBtn {
+  flex: 0 0 200rpx;
+  background: $color-bg-card;
+  color: $color-error;
+  border: 1rpx solid $color-error;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "demoRW",
+  "version": "1.0.0",
+  "description": "演示数据读写网关（服务端操作 demo_* 集合，绕过客户端 ACL）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

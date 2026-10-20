@@ -1,0 +1,26 @@
+# 依赖
+node_modules/
+cloudfunctions/**/node_modules/
+
+# 构建产物
+dist/
+.swc/
+*.tsbuildinfo
+
+# 本地调试 / 运行产物
+.dbg/
+.pai/
+*.log
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 环境变量与密钥
+.env
+.env.*
+*.pem
+*.key
+*.p12

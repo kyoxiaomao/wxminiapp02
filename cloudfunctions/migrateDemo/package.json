@@ -1,0 +1,9 @@
+{
+  "name": "migrateDemo",
+  "version": "1.0.0",
+  "description": "初始化共享演示数据（demo_* 集合，一次性运维工具）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,709 @@
+@use '@/styles/variables.scss' as *;
+
+// 图谱 Tab：顶部工具栏 / 下拉面板 / 详情卡均为文档流区域，
+// Canvas 只占画布区（规避小程序原生组件层级盖住普通 View 的问题）
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #d9c9dd;
+}
+
+// ---------- 悬浮药丸（CoverView，保证浮在原生 Canvas 之上） ----------
+// cover-view 样式受限：无阴影/动画/transform，用全宽容器 + flex 居中替代 calc
+.pillWrap {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  z-index: 30;
+}
+
+.pill {
+  min-width: 132px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid $color-border;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.pillEmoji {
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+.pillName {
+  max-width: 120px;
+  font-size: 13px;
+  font-weight: 700;
+  color: $color-primary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pillCreate {
+  font-size: 13px;
+  font-weight: 700;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.pillArrow {
+  font-size: 11px;
+  color: $color-text-tertiary;
+  margin-left: 4px;
+}
+
+// ---------- 药丸展开面板（CoverView） ----------
+.menuWrap {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  display: flex;
+  // 纵向排列 + 居中：面板宽度由最宽的内容行决定（自适应）
+  flex-direction: column;
+  align-items: center;
+  z-index: 29;
+}
+
+.menu {
+  min-width: 160px;
+  max-width: 320px;
+  background: #ffffff;
+  border: 1px solid $color-border;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  align-self: stretch;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid $color-divider;
+}
+
+.menuItemActive {
+  background: #e4d3ee;
+}
+
+.menuEmoji {
+  width: 20px;
+  font-size: 15px;
+  text-align: center;
+}
+
+// 图谱头像（创建时上传，圆形）
+.menuAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: $color-tag-bg;
+}
+
+// 共享按钮（多人协作占位）
+.menuShare {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f6eef9;
+  font-size: 11px;
+  line-height: 1.4;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.menuName {
+  margin-left: 8px;
+  max-width: 130px;
+  font-size: 13px;
+  font-weight: 600;
+  color: $color-text-primary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.menuMeta {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 10px;
+  color: $color-text-tertiary;
+  text-align: left;
+}
+
+.menuCreate {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  // cover-view 文字基线问题：显式行高=高度，保证文字垂直居中
+  line-height: 34px;
+  background: #f6eef9;
+  border-bottom: 1px solid $color-divider;
+  font-size: 13px;
+  font-weight: 600;
+  color: $color-primary;
+}
+
+// ---------- 画布区域 ----------
+.canvasWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+// ---------- 节点详情卡（底部文档流，画布上让；紧凑高度） ----------
+.card {
+  flex: 0 0 auto;
+  background: #ffffff;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 20px calc(env(safe-area-inset-bottom) + 10px);
+  box-shadow: 0 -8px 30px rgba(60, 35, 75, 0.25);
+  max-height: 30vh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  z-index: 9;
+}
+
+.grip {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #e3d9e8;
+  margin: 0 auto 8px;
+}
+
+.cardScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.who {
+  min-width: 0;
+  flex: 1;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cardName {
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: $color-text-primary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 编辑入口（右上角小胶囊）
+.editBtn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f6eef9;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.editIcon {
+  font-size: 11px;
+}
+
+.editText {
+  font-size: 12px;
+  font-weight: 600;
+  color: $color-primary;
+}
+
+// 名字下方：亲属称谓小标签 + 出生年月
+.sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: $color-primary;
+}
+
+// 详情卡称谓：可编辑输入（同 tag 药丸外观，点击即改）
+// 宽度由 TSX 按字数动态计算（原生 Input 无法用 CSS width:auto 缩到内容宽）
+// 垂直居中：原生 Input 内文字不随竖向 padding 居中，必须固定 height + line-height
+.tagInput {
+  height: 18px;
+  line-height: 18px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: $color-primary;
+  box-sizing: border-box;
+}
+
+.birth {
+  font-size: 11px;
+  color: $color-text-tertiary;
+}
+
+// ---------- 名片核心字段 ----------
+.fields {
+  margin-top: 10px;
+  background: #faf6fc;
+  border-radius: 12px;
+  padding: 1px 14px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.fieldLabel {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: $color-text-tertiary;
+  white-space: nowrap;
+}
+
+.fieldValue {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: $color-text-primary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fieldMore {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.noCard {
+  margin-top: 14px;
+  padding: 14px 0;
+  display: flex;
+  justify-content: center;
+  background: #faf6fc;
+  border-radius: 12px;
+}
+
+.noCardText {
+  font-size: 13px;
+  color: $color-text-tertiary;
+}
+
+// 关联名片主按钮
+.linkCardBtn {
+  margin-top: 12px;
+  padding: 0 28px;
+  height: 34px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-primary;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.linkCardText {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+// ---------- 新建图谱悬浮面板（画布保持可见，紫底半透明遮罩，面板垂直居中） ----------
+.creatorMask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(125, 60, 152, 0.35);
+  z-index: 60;
+}
+
+.creator {
+  position: absolute;
+  top: 50%;
+  left: 24px;
+  right: 24px;
+  transform: translateY(-50%);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 16px 18px 16px;
+  box-shadow: 0 12px 40px rgba(60, 35, 75, 0.3);
+  box-sizing: border-box;
+  z-index: 61;
+}
+
+.creatorTitle {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: $color-text-primary;
+}
+
+.creatorBody {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.creatorAvatarWrap {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.creatorAvatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: $color-tag-bg;
+}
+
+.creatorAvatarEmpty {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-tag-bg;
+}
+
+.creatorAvatarIcon {
+  font-size: 26px;
+}
+
+.creatorAvatarTip {
+  font-size: 11px;
+  color: $color-text-tertiary;
+}
+
+.creatorForm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.creatorField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.creatorLabel {
+  font-size: 12px;
+  color: $color-text-tertiary;
+}
+
+.creatorInput {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #faf6fc;
+  font-size: 14px;
+  color: $color-text-primary;
+  box-sizing: border-box;
+}
+
+// 类型下拉菜单
+.typeSelect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #faf6fc;
+}
+
+.typeSelectText {
+  font-size: 14px;
+  color: $color-text-primary;
+}
+
+.typeSelectArrow {
+  font-size: 11px;
+  color: $color-text-tertiary;
+}
+
+// 类型下拉（悬浮层，不撑开面板高度）
+.typeSelectWrap {
+  position: relative;
+}
+
+.typeMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  border: 1px solid $color-border;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(60, 35, 75, 0.14);
+}
+
+// 最多显示约 5 行，超出内部滚动
+.typeMenuScroll {
+  max-height: 186px;
+}
+
+.typeMenuItem {
+  padding: 9px 12px;
+  border-bottom: 1px solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:active {
+    background: $color-bg-hover;
+  }
+}
+
+.typeMenuItemActive {
+  background: #f6eef9;
+}
+
+.typeMenuText {
+  font-size: 13px;
+  color: $color-text-secondary;
+}
+
+.typeMenuTextActive {
+  color: $color-primary;
+  font-weight: 600;
+}
+
+.typeCustomInput {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #faf6fc;
+  font-size: 14px;
+  color: $color-text-primary;
+  box-sizing: border-box;
+}
+
+.creatorSubmit {
+  margin-top: 16px;
+  height: 42px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-primary;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.creatorSubmitText {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.placeholder {
+  color: $color-text-disabled;
+}
+
+// ---------- 添加成员（底部文档流） ----------
+.picker {
+  flex: 0 0 auto;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 14px 20px calc(env(safe-area-inset-bottom) + 12px);
+  box-shadow: 0 -8px 30px rgba(60, 35, 75, 0.25);
+  height: 54vh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  z-index: 9;
+}
+
+.pickerHead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pickerTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: $color-text-primary;
+}
+
+.pickerClose {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-bg-hover;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.pickerCloseText {
+  font-size: 14px;
+  color: $color-text-secondary;
+}
+
+.pickerList {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:active {
+    background: $color-bg-hover;
+  }
+}
+
+.pickerAvatar {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  background: $color-primary-light;
+}
+
+.pickerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.pickerName {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: $color-text-primary;
+  @include text-ellipsis;
+}
+
+.pickerMeta {
+  display: block;
+  font-size: 12px;
+  color: $color-text-secondary;
+  margin-top: 2px;
+  @include text-ellipsis;
+}
+
+.pickerAdd {
+  font-size: 13px;
+  font-weight: 600;
+  color: $color-primary;
+  background: $color-tag-bg;
+  border-radius: 999px;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+
+.pickerEmpty {
+  padding: 40rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.pickerEmptyText {
+  font-size: 13px;
+  color: $color-text-tertiary;
+}

@@ -1,0 +1,75 @@
+@use '@/styles/variables.scss' as *;
+
+.avatar {
+  flex: 0 0 auto;
+  border-radius: $radius-round;
+  background: $color-bg-hover;
+}
+
+/* 尺寸预设：SCSS rpx 由构建期转换，各端一致 */
+.size56 {
+  width: 56rpx;
+  height: 56rpx;
+}
+
+.size72 {
+  width: 72rpx;
+  height: 72rpx;
+}
+
+.size96 {
+  width: 96rpx;
+  height: 96rpx;
+}
+
+.size120 {
+  width: 120rpx;
+  height: 120rpx;
+}
+
+.size140 {
+  width: 140rpx;
+  height: 140rpx;
+}
+
+.size160 {
+  width: 160rpx;
+  height: 160rpx;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-tag-bg;
+}
+
+.initial {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.size56 .initial {
+  font-size: $font-size-sm;
+}
+
+.size72 .initial {
+  font-size: $font-size-lg;
+}
+
+.size96 .initial {
+  font-size: $font-size-xl;
+}
+
+.size120 .initial {
+  font-size: 40rpx;
+}
+
+.size140 .initial {
+  font-size: 48rpx;
+}
+
+.size160 .initial {
+  font-size: 56rpx;
+}

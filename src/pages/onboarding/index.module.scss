@@ -137,6 +137,14 @@
   white-space: nowrap;
 }
 
+/* 跳过授权：直接去名片详情补资料 */
+.skipLink {
+  margin-top: $spacing-sm;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  text-decoration: underline;
+}
+
 /* ---------- ICP 备案信息 ---------- */
 .icp {
   width: 100%;

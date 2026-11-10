@@ -259,6 +259,12 @@
   font-size: 30rpx;
 }
 
+/* 新人指引选名片步骤：把连接按钮描边放大，指引视线落点 */
+.linkBtnHint {
+  border: 2rpx solid $color-primary;
+  background: rgba(125, 60, 152, 0.14);
+}
+
 /* ---------- 新建悬浮按钮 ---------- */
 .fab {
   position: fixed;
@@ -285,4 +291,15 @@
   color: $color-text-white;
   line-height: 1;
   margin-top: -4rpx;
+}
+
+/* ---------- 新人指引：示例角标 ---------- */
+.sampleTag {
+  flex: 0 0 auto;
+  margin-left: 8rpx;
+  padding: 2rpx 10rpx;
+  border-radius: $radius-round;
+  font-size: 20rpx;
+  color: $color-text-tertiary;
+  background: rgba(125, 60, 152, 0.1);
 }

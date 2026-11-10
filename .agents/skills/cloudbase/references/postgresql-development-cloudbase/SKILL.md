@@ -1,7 +1,7 @@
 ---
 name: postgresql-development-cloudbase
 description: "Use when building, debugging, or evaluating CloudBase PostgreSQL / CloudBase PG / PG mode apps, including Postgres schema setup, queryPgDatabase/managePgDatabase, JS SDK v3 app.rdb() CRUD/RPC, PG HTTP API fallback, RLS-style permissions, username-password auth, and Web CMS/admin CRUD flows backed by CloudBase PG."
-version: 2.35.1
+version: 2.36.0
 license: MIT
 alwaysApply: false
 ---
@@ -175,7 +175,7 @@ CloudBase PG (`app.rdb()`, `app.storage.from('bucket')`) uses **different API me
 - ❌ `db.from("public.public.articles")` — WRONG, double schema prefix, will fail with `PGRST205`
 - `objectName="public.articles"` in `queryPgDatabase()` is the MCP tool format — do NOT copy this into `db.from()`.
 
-Use static imports and one shared `app.rdb()` client (SDK init reference: [webv3-pg/initialization.md](https://docs.cloudbase.net/api-reference/webv3-pg/initialization.md)):
+Use static imports and one shared `app.rdb()` client (SDK init reference: [webv3/initialization.md](https://docs.cloudbase.net/api-reference/webv3/initialization.md)):
 
 ```ts
 import cloudbase from "@cloudbase/js-sdk";
@@ -215,7 +215,7 @@ const { data } = await db.rpc("function_name", { id });
 
 Common query helpers: `.eq()`, `.neq()`, `.gt()`, `.gte()`, `.lt()`, `.lte()`, `.like()`, `.ilike()`, `.in()`, `.is()`, `.contains()`, `.textSearch()`, `.or()`, `.not()`, `.match()`, `.order()`, `.limit()`, `.range()`, `.single()`.
 
-**Full cookbook (official webv3-pg API — copy these, do not re-derive from .d.ts).** Source: [webv3-pg/postgresql/fetch.md](https://docs.cloudbase.net/api-reference/webv3-pg/postgresql/fetch.md) — fetch / insert / update / delete / upsert / filters / modifiers / rpc share the same path prefix, one page per verb（URL 加 `.md` 可取 raw markdown 原文）:
+**Full cookbook (official webv3 API — copy these, do not re-derive from .d.ts).** Source: [webv3/postgresql/fetch.md](https://docs.cloudbase.net/api-reference/webv3/postgresql/fetch.md) — fetch / insert / update / delete / upsert / filters / modifiers / rpc share the same path prefix, one page per verb（URL 加 `.md` 可取 raw markdown 原文）:
 
 ```ts
 // COUNT only — no rows returned, count comes back on the result object
@@ -302,7 +302,8 @@ Hard rule: never let an upload error be silently swallowed. If `uploadCoverImage
 
 - PG HTTP API is in the CloudBase relational database HTTP API family, together with MySQL. In MCP docs/search this appears under `mysqldb`.
 - Before writing raw `fetch()` code, query OpenAPI docs: `searchKnowledgeBase(mode="openapi", apiName="mysqldb", query="PostgreSQL fetch insert update rpc")`.
-- Do not construct `/api/v1/rdb/rest` or `/api/v1/rdb/rest/rpc` from memory. A guessed path that returns 404 is a hard blocker; switch back to JS SDK v3 or read the OpenAPI contract.
+- Do not construct the REST paths from memory. A guessed path that returns 404 is a hard blocker; read the OpenAPI contract for table endpoints (`fetch` / `insert` / `update` / `delete`).
+- **Database functions (RPC)** are how you perform an atomic server-side operation — a guarded counter, a conditional update, a multi-step write — that a plain REST update cannot express safely. The endpoint is `POST /v1/rdb/rest/rpc/<function>` on the same gateway base as the table endpoints; it is **not** part of the `mysqldb` OpenAPI document, so confirm it with one live call before writing it into code.
 - If environment variables expose `TCB_HTTP_API_BASE_URL` / `VITE_TCB_HTTP_API_BASE_URL`, treat them as the base only. The path, method, headers, and auth model must still come from OpenAPI docs or an existing working helper.
 
 ## Frontend Guardrails

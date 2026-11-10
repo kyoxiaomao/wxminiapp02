@@ -1,0 +1,81 @@
+// 新人指引遮罩：纯 View 实现（Canvas 2D 同层渲染，View 可直接浮在画布上）
+// 四块面板必须各自独立定位，不能用全屏父容器——父容器会拦截挖孔内的触摸
+.mask {
+  position: fixed;
+  z-index: 60;
+}
+
+.bubble {
+  position: fixed;
+  z-index: 61;
+  box-sizing: border-box;
+  // 472rpx：与 24rpx 字号同一套缩放，任何屏宽下都放得下 17 字/行
+  width: 472rpx;
+  padding: 14px 16px;
+  border-radius: 12px;
+  // 深色半透明：背后遮罩/画布透出来，视觉上明确是「透明面板」
+  background: rgba(28, 18, 38, 0.72);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.counter {
+  position: absolute;
+  top: 9px;
+  right: 14px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.title {
+  padding-right: 34px;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.desc {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  // 普通 View 支持正常换行，按内容自动折行即可
+  white-space: normal;
+  word-break: break-word;
+}
+
+.actions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.linkText {
+  margin-left: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.wait {
+  margin-left: 8px;
+  padding: 4px 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.btnPrimary {
+  margin-left: 12px;
+  min-width: 64px;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 12px;
+  font-weight: 700;
+  color: #5b2a6e;
+  text-align: center;
+}

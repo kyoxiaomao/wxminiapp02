@@ -1,7 +1,7 @@
 ---
 name: ops-inspector
-description: AIOps-style CloudBase inspection skill (v3). Use when users need health checks, log diagnosis, alarm interpretation (CPU alert normal?, peak QPS), metrics via queryEnv(action=metrics), or fault playbooks for 429 / function 404 / ACCESS_TOKEN_INVALID / zero invocations. Triggers on 巡检, 诊断, 告警, 峰值 QPS, 限频, 调用量为 0, troubleshooting.
-version: 2.35.1
+description: AIOps-style CloudBase inspection skill (v3). Use when users need health checks, log diagnosis, alarm interpretation (CPU alert normal?, peak QPS), metrics via queryEnv(action=metrics), or fault playbooks for 429 / AI model 429 / function timeout / function 404 / ACCESS_TOKEN_INVALID / zero invocations. Triggers on 巡检, 诊断, 告警, 峰值 QPS, 限频, 调用量为 0, troubleshooting.
+version: 2.36.0
 license: MIT
 alwaysApply: false
 ---
@@ -21,7 +21,7 @@ If a referenced sibling skill file is missing from this environment, ask the use
 - The user asks for an "inspection", "health check", "巡检", "诊断", or "troubleshooting" of their CloudBase environment.
 - The user wants to review recent error logs across services.
 - The user asks **告警解读** questions: whether a **CPU 告警** is normal, what **峰值 QPS** was, or whether throttle/error metrics look healthy.
-- The symptom matches a v3 fault playbook: **429 / 限频**, **云函数 404**, **ACCESS_TOKEN_INVALID**, or **调用量为 0**.
+- The symptom matches a v3 fault playbook: **429 / 限频**, **AI 模型 429 / Token 额度**, **云函数超时或轮询超时（`-404005`/433）**, **云函数 404**, **ACCESS_TOKEN_INVALID**, or **调用量为 0**.
 
 ### Read before writing code if
 
@@ -31,11 +31,12 @@ If a referenced sibling skill file is missing from this environment, ask the use
 ### Then also read
 
 - Alarm interpretation baselines -> `references/alarm-interpretation.md`
-- Fault playbooks (429 / 404 / token / zero calls) -> `references/fault-playbooks.md`
+- Fault playbooks (429 / AI model 429 / function timeout / 404 / token / zero calls) -> `references/fault-playbooks.md`
 - Cloud function issues -> `../cloud-functions/SKILL.md`
 - CloudRun issues -> `../cloudrun-development/SKILL.md`
 - Database issues -> `../postgresql-development-cloudbase/SKILL.md` for CloudBase PG / PostgreSQL, `../relational-database-mcp-cloudbase/SKILL.md` for MySQL, or `../cloudbase-document-database-web-sdk/SKILL.md` for NoSQL
 - Auth readiness (token failures) -> `../auth-tool-cloudbase/SKILL.md`
+- Environment not visible, binding fails, or only one environment shows up -> `../cloudbase-cli/references/core.md` (*Where credentials are read from*)
 - Platform overview -> `../cloudbase-platform/SKILL.md`
 
 ### Do NOT use for
@@ -47,7 +48,7 @@ If a referenced sibling skill file is missing from this environment, ask the use
 
 ### Common mistakes / gotchas
 
-- Running a full inspection without first confirming the environment is bound (`auth` tool must show logged-in and env-bound state).
+- Running a full inspection without first confirming the environment is bound (`auth` tool must show logged-in and env-bound state). If binding fails or only one environment appears, credentials are being resolved **per directory** — see `../cloudbase-cli/references/core.md` (*Where credentials are read from*); it is usually neither a permissions nor a platform problem.
 - Ignoring CLS log service status — if CLS is not enabled, `queryLogs` will fail; always check first with `queryLogs(action="checkLogService")`.
 - Searching logs without a time range — this can return excessive or irrelevant results. Always scope searches to a relevant time window.
 - Treating a single error log as the root cause without correlating across resources. A function error may stem from a database or config issue.
@@ -56,10 +57,10 @@ If a referenced sibling skill file is missing from this environment, ask the use
 
 ### Minimal checklist
 
-- [ ] Environment is bound and accessible (`queryEnv(action="info")`)
+- [ ] Environment is bound and accessible (`queryEnv(action="info")`) — if it fails, or only one environment shows up, confirm the current identity and credential slot first (`../cloudbase-cli/references/core.md`)
 - [ ] Metrics pulled with `queryEnv(action="metrics")` when the question involves QPS / CPU / throttle / invocation volume
 - [ ] CLS log service is enabled (`queryLogs(action="checkLogService")`) when log diagnosis is needed
-- [ ] Matching fault playbook selected when symptoms match 429 / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0
+- [ ] Matching fault playbook selected when symptoms match 429 / AI model 429 / function timeout / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0
 - [ ] Time range is specified for any log or metrics searches
 - [ ] Findings are summarized with severity levels, **告警解读**, and actionable recommendations
 
@@ -81,7 +82,7 @@ v3 adds two mandatory capabilities on top of log/resource inspection:
 | **Full inspection** | User asks for a general health check / 巡检 / 全面检查 | All resource types + core metrics |
 | **Targeted inspection** | User reports a specific error or asks about a specific resource | One resource type or playbook |
 | **Alarm interpretation** | User asks CPU 告警是否正常 / 峰值 QPS / 是否限流 | Metrics-first, then logs |
-| **Fault playbook** | 429 / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0 | Playbook steps only |
+| **Fault playbook** | 429 / AI model 429 / function timeout / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0 | Playbook steps only |
 
 ### Full Inspection Workflow
 
@@ -155,7 +156,7 @@ queryLogs(action="searchLogs", queryString="ERROR", service="tcbr", startTime="<
 Look for patterns:
 - Repeated error messages (same error many times)
 - Cascading failures (errors in multiple services around the same time)
-- Timeout / 429 / 404 / ACCESS_TOKEN_INVALID patterns → jump to the matching playbook
+- Timeout / 429 / 404 / ACCESS_TOKEN_INVALID patterns → jump to the matching playbook; a **429 from an AI model call** goes to Playbook 5, not Playbook 1
 
 **Step 7 — Summary Report**
 
@@ -210,7 +211,7 @@ When the user specifies a resource type or a specific resource:
 3. **Database issues**: Check `queryPgDatabase(action="context"|"metadata"|"objects")` for CloudBase PG, `queryMysqlDatabase` for MySQL, or `readNoSqlDatabaseStructure` for NoSQL depending on type; for CPU/disk alerts also pull `MysqlCpuUsageRate` / `MysqlStorageUsage` metrics
 4. **General error search**: `queryLogs(action="searchLogs", queryString="<error-keyword>", ...)`
 5. **Alarm / QPS questions**: follow `references/alarm-interpretation.md`
-6. **429 / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0**: follow `references/fault-playbooks.md`
+6. **429 / AI model 429 / function timeout / function 404 / ACCESS_TOKEN_INVALID / 调用量为 0**: follow `references/fault-playbooks.md`
 
 ### AIOps Methodology
 
@@ -262,6 +263,8 @@ This skill follows AIOps principles for intelligent inspection:
 | Specific function errors | `functionName:<name> AND level:ERROR` |
 | 5xx HTTP errors | `statusCode:>499` |
 | 429 / throttle | `429 OR throttle OR 限流 OR FREQUENCY` |
+| AI model 429 / Token quota | `EXCEED_TOKEN_QUOTA_LIMIT OR Too Many Requests` |
+| Function poll-retry exhausted | `404005 OR exceed max poll` |
 | Function 404 | `404 OR FUNCTION_NOT_FOUND` |
 | Token invalid | `ACCESS_TOKEN_INVALID OR token invalid` |
 | Cold start issues | `coldStart OR 冷启动` |

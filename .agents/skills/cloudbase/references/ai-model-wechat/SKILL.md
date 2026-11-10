@@ -1,7 +1,7 @@
 ---
 name: ai-model-wechat
 description: "Use this skill for WeChat Mini Program AI via wx.cloud.extend.AI (小程序, wx.cloud apps). Covers generateText and streamText with callbacks (onText, onEvent, onFinish); streamText needs a data wrapper, generateText returns the raw response. Models via wx.cloud.extend.AI.createModel with groups hunyuan-exp (小程序成长计划), cloudbase (main managed), or custom-*; model id goes in the data wrapper `model` field. MUST run two-step preflight before code — see body. NOT for browser/Web (use ai-model-web), Node.js backend (use ai-model-nodejs), or image generation (use ai-model-nodejs)."
-version: 2.35.1
+version: 2.36.0
 license: MIT
 alwaysApply: false
 ---
@@ -112,6 +112,8 @@ callCloudApi({
 ```
 
 **Hit criterion:** the response's `attendRecords` contains at least one entry where `activityName === "ai_miniprogram_inspire_plan"` and `envId` matches the current environment. On hit, default to `createModel("hunyuan-exp")` + `hunyuan-2.0-instruct-20251111`; billing uses the plan-exclusive Token pack `pkg_hunyuan_token_la_inspire_100m`.
+
+⚠️ **The gifted Token is source-scoped.** It applies to **Mini Program client calls** and **administrator-identity calls** (console playground, calls made inside a cloud function) only. A call from any other origin does not draw on it and settles against the environment's resource-point pool instead — which is what a user sees as "the Token pack did not apply, resource points were charged". When a report sounds like that, check the call origin before touching the code or the model config. Same rule for the Token Credits pack path below.
 
 **On miss:** do NOT silently fall back. Tell the user "the current environment is not enrolled in 小程序成长计划", surface the enrollment entry `https://docs.cloudbase.net/ai/ai-inspire-plan`, and ask whether to enroll and retry, or to switch to the Token Credits resource pack path with a non-hunyuan model.
 

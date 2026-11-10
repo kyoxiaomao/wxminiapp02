@@ -1,15 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Canvas, ScrollView, CoverView, CoverImage, Image, Input } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro, { useDidShow, useDidHide } from '@tarojs/taro';
 import classnames from 'classnames';
 import { useStoreVersion } from '@/store/useStoreVersion';
 import { store } from '@/store';
+import { tutorialController, useTutorial, TUTORIAL_STEPS } from '@/tutorial/controller';
+import TutorialOverlay, { type TutorialHole } from '@/components/TutorialOverlay';
 import { GRAPH_PRESETS } from '@/mock/presets';
 import { uploadFile } from '@/services/cloud';
+import { markTutorialSeen } from '@/services/auth';
 import { GRAPH_TYPE_LABELS, DEFAULT_MY_CARD_NAME, type GraphType, type RelationType, type GraphNode, type Card } from '@/types';
 import { ForceGraph, type ForceLink, type ForceNode } from '@/utils/forceGraph';
 import { inferGender } from '@/utils/avatarPainter';
 import { dbg } from '@/utils/graphDebug';
+import { perfMark } from '@/utils/perf';
 import Avatar from '@/components/Avatar';
 import styles from './index.module.scss';
 
@@ -42,6 +46,8 @@ const FIT_K_MIN = 0.62;
 const LONG_PRESS_MS = 500;
 /** 长按操作按钮半径（屏幕像素，世界坐标按缩放反算） */
 const BTN_R = 13;
+/** 左上角问号按钮直径（与微信右上角胶囊按钮垂直居中对齐） */
+const TUT_HELP_SIZE = 30;
 
 const TYPE_EMOJI: Record<GraphType, string> = {
   family: '👪',
@@ -145,6 +151,21 @@ function queryRect(selector: string): Promise<{ left: number; top: number }> {
   });
 }
 
+/** 取元素完整矩形（指引遮罩挖孔用） */
+function queryBox(selector: string): Promise<TutorialHole | null> {
+  return new Promise(resolve => {
+    const query = Taro.createSelectorQuery();
+    query.select(selector).boundingClientRect().exec(res => {
+      const r = res && res[0];
+      if (r && typeof r.left === 'number' && typeof r.top === 'number' && r.width > 0 && r.height > 0) {
+        resolve({ x: r.left, y: r.top, w: r.width, h: r.height });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
 function nowStr(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -175,6 +196,19 @@ const GraphPage: React.FC = () => {
   const [createTypeLabel, setCreateTypeLabel] = useState('');
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
 
+  // ---------- 新人指引 ----------
+  const tut = useTutorial();
+  const tutStep = TUTORIAL_STEPS[tut.stepIndex];
+  const [tutHole, setTutHole] = useState<TutorialHole | null>(null);
+  // 遮罩重算触发器：长按按钮出现/收起、画布尺寸变化、取景变化
+  const [tutTick, setTutTick] = useState(0);
+  // 首次进入提示：引擎就绪后才弹（避免空态竞争）
+  const [engineReady, setEngineReady] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const promptCheckedRef = useRef(false);
+  // 教程高亮圈（画在画布上，跟随冻结视口）
+  const tutRingRef = useRef<{ x: number; y: number; r: number } | null>(null);
+
   // ---------- 引擎 / 画布 / 手势（高频，走 ref） ----------
   const engineRef = useRef<ForceGraph | null>(null);
   const envRef = useRef<CanvasEnv | null>(null);
@@ -194,8 +228,8 @@ const GraphPage: React.FC = () => {
   const actionBornRef = useRef(0);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressActiveRef = useRef(false);
-  // 新生成的空白节点落位锚点（版本同步重建后放置到锚点旁）
-  const pendingSpawnRef = useRef<{ anchorId: string; nodeId: string } | null>(null);
+  // 新生成的空白节点落位（版本同步重建后放到预计算的空位）
+  const pendingSpawnRef = useRef<{ anchorId: string; nodeId: string; x: number; y: number } | null>(null);
   // 节点头像位图缓存：key=名片头像地址；加载中的地址先入 loading 集合防重复加载；
   // 加载失败的地址入 failed 集合，避免绘制循环里每帧重试刷爆日志
   const avatarImgsRef = useRef(new Map<string, HTMLImageElement>());
@@ -205,6 +239,8 @@ const GraphPage: React.FC = () => {
   const avatarUrlCacheRef = useRef(new Map<string, string>());
   // 重绘脏标记：物理沉降后空闲帧跳过 tick+draw，交互/状态变化时置脏重绘一帧
   const dirtyRef = useRef(true);
+  // 首帧耗时卡点只打一次
+  const firstFrameRef = useRef(false);
   // 背景渐变缓存：尺寸不变时复用，避免每帧 createRadialGradient
   const bgGradRef = useRef<{ grad: CanvasGradient; W: number; H: number } | null>(null);
 
@@ -276,10 +312,21 @@ const GraphPage: React.FC = () => {
     }
   }, []);
 
+  /** 问号按钮的 top：与微信右上角胶囊按钮垂直居中对齐（取不到位置时置 0 并报错暴露） */
+  const tutHelpTop = useMemo(() => {
+    const rect = Taro.getMenuButtonBoundingClientRect();
+    if (!rect || !rect.height) {
+      console.error('[GraphCanvas] 微信胶囊按钮位置无效，问号按钮无法对齐:', rect);
+      return 0;
+    }
+    return rect.top + (rect.height - TUT_HELP_SIZE) / 2;
+  }, []);
+
   const graphName = graph?.name || '图谱';
 
   // ---------- 以「我」为中心：ego 节点（布局中心用） ----------
   const egoNodeId = useMemo(() => {
+    if (store.tutorialActive && graphId === store.tutorialGraphId) return store.tutorialEgoNodeId;
     const myCardId = store.getMyCard()?.id;
     if (!myCardId) return '';
     return store.listNodes(graphId).find(n => n.cardId === myCardId)?.id || '';
@@ -396,8 +443,10 @@ const GraphPage: React.FC = () => {
     dirtyRef.current = true; // 按钮消失立即重绘
     if (id) {
       const n = engineRef.current?.nodeById(id);
-      if (n) n.pinned = false;
+      // 教程期间保持冻结：不解除临时 pin
+      if (n && !store.tutorialActive) n.pinned = false;
     }
+    setTutTick(v => v + 1);
   };
 
   /** 命中关系标签（以连线中点为圆心，屏幕半径 18px） */
@@ -430,16 +479,58 @@ const GraphPage: React.FC = () => {
       if (text && text !== link.label) {
         store.updateEdge(link.id, { label: text, type: relationTypeOf(text) });
         Taro.showToast({ title: '已修改', icon: 'none' });
+        if (store.tutorialActive && link.id === tut.practiceEdgeId) {
+          tutorialController.notify('edgeChanged');
+        }
+      } else if (store.tutorialActive) {
+        Taro.showToast({ title: '请把「关系」改成新的称谓', icon: 'none' });
       }
     });
   };
 
+  /**
+   * 给新节点找一个空位：以锚点为圆心做极坐标采样，优先离所有现有节点足够远的角度
+   * 最小圆心间距 3.2R（头像直径 2R + 间距），半径 170→300 递增，12 个方向轮询
+   */
+  const findFreeSpawn = (anchorId: string): { x: number; y: number } => {
+    const anchor = engineRef.current?.nodeById(anchorId);
+    const nodes = engineRef.current?.nodes || [];
+    if (!anchor) return { x: 0, y: 0 };
+    const minDist = R_NODE * 3.2;
+    let best = { x: anchor.x + Math.cos(Math.PI / 4) * 170, y: anchor.y + Math.sin(Math.PI / 4) * 170 };
+    let bestGap = -1;
+    for (let r = 170; r <= 300; r += 22) {
+      for (let i = 0; i < 12; i++) {
+        const ang = Math.PI / 4 + (i * Math.PI * 2) / 12;
+        const x = anchor.x + Math.cos(ang) * r;
+        const y = anchor.y + Math.sin(ang) * r;
+        let gap = Infinity;
+        for (const n of nodes) {
+          if (n.id === anchorId) continue;
+          const d = Math.hypot(n.x - x, n.y - y);
+          if (d < gap) gap = d;
+          if (d < minDist) break;
+        }
+        if (gap >= minDist) return { x, y };
+        if (gap > bestGap) {
+          bestGap = gap;
+          best = { x, y };
+        }
+      }
+    }
+    // 四周都被占满：取采样里最空的一处（避免直接叠在锚点上）
+    return best;
+  };
+
   /** 在锚点节点旁生成空白节点并连一条「关系」边（标签可点击编辑） */
   const addBlankNode = (anchorId: string) => {
+    const spot = findFreeSpawn(anchorId);
     const node = store.createNode({ graphId, cardId: null, role: '成员' });
-    store.createEdge({ graphId, source: anchorId, target: node.id, type: 'custom', label: '关系' });
-    pendingSpawnRef.current = { anchorId, nodeId: node.id };
+    const edge = store.createEdge({ graphId, source: anchorId, target: node.id, type: 'custom', label: '关系' });
+    pendingSpawnRef.current = { anchorId, nodeId: node.id, x: spot.x, y: spot.y };
     Taro.vibrateShort({ type: 'light' });
+    // 教程：记录练习节点/关系，推进到「打开详情」
+    tutorialController.notify('nodeAdded', { nodeId: node.id, edgeId: edge.id });
   };
 
   /** 删除节点（含其全部关系），二次确认 */
@@ -454,6 +545,7 @@ const GraphPage: React.FC = () => {
         if (res.confirm) {
           store.deleteNode(nodeId);
           Taro.showToast({ title: '已删除', icon: 'none' });
+          if (nodeId === tut.practiceNodeId) tutorialController.notify('nodeDeleted');
         }
       }
     });
@@ -496,6 +588,18 @@ const GraphPage: React.FC = () => {
     dirtyRef.current = true;
   };
 
+  /** 教程期间冻结物理：所有节点钉住，遮罩挖孔不会随力导向漂移 */
+  const freezeForTutorial = () => {
+    const engine = engineRef.current;
+    if (!engine || !store.tutorialActive) return;
+    engine.nodes.forEach(n => {
+      n.pinned = true;
+      n.vx = 0;
+      n.vy = 0;
+    });
+    dirtyRef.current = true;
+  };
+
   // ---------- 画布尺寸同步（面板/卡片开合导致布局变化后调用） ----------
   // 注意：只更新位图尺寸与触摸偏移，绝不动视口（viewRef）——
   // 否则每次卡片开合都会把用户当前的平移/缩放状态重置回初始取景
@@ -532,6 +636,7 @@ const GraphPage: React.FC = () => {
       env.left = rect.left;
       env.top = rect.top;
       dirtyRef.current = true; // 改位图尺寸会清空画布，必须置脏补一帧
+      setTutTick(v => v + 1); // 画布尺寸/偏移变了，遮罩挖孔重算
       dbg('resize', { w: res.width, h: res.height, left: rect.left, top: rect.top });
     })();
   };
@@ -698,6 +803,18 @@ const GraphPage: React.FC = () => {
       ctx.fillText(n.role, n.x, n.y + R_NODE + 18);
     });
 
+    // 教程高亮圈：挖孔目标外圈虚线（世界坐标，随冻结视口对齐遮罩孔）
+    const ring = tutRingRef.current;
+    if (store.tutorialActive && ring) {
+      ctx.beginPath();
+      ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#7d3c98';
+      ctx.lineWidth = 2 / view.k;
+      ctx.setLineDash([6 / view.k, 5 / view.k]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // 长按节点操作按钮：＋ 添加 / － 删除（屏幕恒定尺寸，150ms 渐入）
     const atId = actionTargetRef.current;
     if (atId) {
@@ -744,6 +861,11 @@ const GraphPage: React.FC = () => {
 
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    if (!firstFrameRef.current) {
+      firstFrameRef.current = true;
+      perfMark('首帧绘制完成');
+    }
   };
 
   // ---------- 主循环 ----------
@@ -791,8 +913,15 @@ const GraphPage: React.FC = () => {
       dbg('selectFail', { id, reason: 'nodeMissing' });
       return;
     }
-    // 资料未完善：单击直达名片详情补姓名（姓名输入框自动聚焦提示输入）
+    // 资料未完善：单击我的节点先补资料
     if (isNodeIncomplete(node) && node.cardId) {
+      const myCard = store.getCard(node.cardId);
+      // 首登流程且还没有手机号 → 先打开一键授权页；拒绝授权也可从该页「先完善资料」去详情
+      if (store.firstLoginFlow && !myCard?.phone) {
+        dbg('selectAuth', { id, cardId: node.cardId });
+        Taro.navigateTo({ url: '/pages/onboarding/index' });
+        return;
+      }
       dbg('selectIncomplete', { id, cardId: node.cardId });
       Taro.navigateTo({ url: `/pages/card/detail/index?id=${node.cardId}&focusName=1` });
       return;
@@ -801,6 +930,8 @@ const GraphPage: React.FC = () => {
     selectedRef.current = id;
     setSelectedId(id);
     dirtyRef.current = true; // 高亮/非邻接淡出立即重绘
+    // 教程：点开练习节点详情 → 推进到「关联名片」
+    if (id === tut.practiceNodeId) tutorialController.notify('detailOpened');
   };
 
   const closeCard = () => {
@@ -886,6 +1017,8 @@ const GraphPage: React.FC = () => {
           dbg('longPress', { id: hit.id });
           hit.pinned = true; // 长按期间钉住，按钮稳定不漂
           Taro.vibrateShort({ type: 'light' });
+          setTutTick(v => v + 1); // 遮罩挖孔要扩到新出现的 ＋/－ 按钮
+          tutorialController.notify('longPress');
         }, LONG_PRESS_MS);
       }
     } else if (size === 2) {
@@ -935,6 +1068,8 @@ const GraphPage: React.FC = () => {
     // 手指移动：取消长按判定；长按菜单已弹出则本次触摸不再拖动/平移
     if (movedRef.current && longPressTimerRef.current) clearLongPressTimer();
     if (longPressActiveRef.current) return;
+    // 教程期间冻结视口（不平移/缩放/拖节点）：遮罩挖孔与画布坐标保持对齐
+    if (store.tutorialActive) return;
 
     const size = touchesRef.current.size;
     if (size === 1 && dragNodeRef.current) {
@@ -986,7 +1121,7 @@ const GraphPage: React.FC = () => {
     const size = touchesRef.current.size;
     if (size === 0) {
       const drag = dragNodeRef.current;
-      if (drag && movedRef.current && !wasLongPress) {
+      if (drag && movedRef.current && !wasLongPress && !store.tutorialActive) {
         // 拖动结束（方案 A）：只记坐标不冻结——解除临时 pin 后节点继续参与力学，
         // 邻居弹簧正常回弹；坐标防抖写云端保证重进后位置还原
         drag.pinned = false;
@@ -1053,12 +1188,14 @@ const GraphPage: React.FC = () => {
   // ---------- 初始化画布（一次；graphId 切换走 rebuildEngine） ----------
   useEffect(() => {
     let disposed = false;
+    perfMark('画布初始化开始');
     void (async () => {
       const res = await resolveCanvas('#graphCanvas');
       if (!res || disposed) {
         console.error('[GraphCanvas] Canvas 节点获取失败');
         return;
       }
+      perfMark('Canvas 节点就绪', { w: res.width, h: res.height });
       const dpr = Taro.getSystemInfoSync().pixelRatio || 2;
       res.canvas.width = res.width * dpr;
       res.canvas.height = res.height * dpr;
@@ -1079,7 +1216,10 @@ const GraphPage: React.FC = () => {
       engineRef.current = new ForceGraph(inputs.nodes, inputs.links, undefined, { egoId: egoIdRef.current });
       console.info('[GraphCanvas] 启动：%s（节点 %d / 关系 %d）', graphName, inputs.nodes.length, inputs.links.length);
       fitView(); // 引擎建好立即取景：首屏一出画即到位，不再等 45 帧后跳位
+      freezeForTutorial();
       startLoop(res.canvas);
+      setEngineReady(true);
+      perfMark('画布引擎就绪', { nodes: inputs.nodes.length, links: inputs.links.length });
     })();
     return () => {
       disposed = true;
@@ -1100,25 +1240,28 @@ const GraphPage: React.FC = () => {
     const inputs = buildInputs(gid);
     // ego 以目标图谱为准（切图谱时 state 尚未更新，不能用闭包里的旧 graphId）
     const myCardId = store.getMyCard()?.id;
-    const egoId = myCardId ? store.listNodes(gid).find(n => n.cardId === myCardId)?.id || '' : '';
+    const egoId =
+      store.tutorialActive && gid === store.tutorialGraphId
+        ? store.tutorialEgoNodeId
+        : myCardId
+          ? store.listNodes(gid).find(n => n.cardId === myCardId)?.id || ''
+          : '';
     engineRef.current = new ForceGraph(inputs.nodes, inputs.links, previous, { egoId });
-    // 长按「＋」新生成的空白节点：落到锚点节点旁（而非 ego 周围）
+    // 长按「＋」新生成的空白节点：落到 addBlankNode 预先算好的空位
     if (pendingSpawnRef.current) {
-      const { anchorId, nodeId } = pendingSpawnRef.current;
+      const { nodeId, x, y } = pendingSpawnRef.current;
       pendingSpawnRef.current = null;
-      const anchor = engineRef.current.nodeById(anchorId);
       const fresh = engineRef.current.nodeById(nodeId);
-      if (anchor && fresh) {
-        // 按锚点已有关系数错开落位角度：连续「＋」出的节点不会叠在同一扇区（防点错节点）
-        const deg = store.listEdges(gid).filter(e => e.source === anchorId || e.target === anchorId).length;
-        const ang = Math.PI / 4 + (deg - 1) * 0.9 + (Math.random() * 0.3 - 0.15);
-        fresh.x = anchor.x + Math.cos(ang) * 150;
-        fresh.y = anchor.y + Math.sin(ang) * 150;
+      if (fresh) {
+        fresh.x = x;
+        fresh.y = y;
         fresh.vx = 0;
         fresh.vy = 0;
       }
     }
     if (selectedRef.current && !store.getNode(selectedRef.current)) closeCard();
+    freezeForTutorial();
+    setTutTick(v => v + 1);
   };
 
   // ---------- 图谱切换 ----------
@@ -1146,13 +1289,15 @@ const GraphPage: React.FC = () => {
         setGraphId(first.id);
         rebuildEngine(engineRef.current, first.id);
         fitView(); // 数据载入完成：按首个图谱取景
+        perfMark('图谱页采用首个图谱', { graphId: first.id });
         console.info('[GraphCanvas] 数据载入完成，采用图谱：%s', first.name);
       }
       return;
     }
     if (!store.getGraph(graphId)) {
-      // 当前图谱被删除：切到第一个可用图谱
-      const first = store.listGraphs()[0]?.id || '';
+      // 当前图谱被删除：优先回到指引前的图谱，其次第一个可用图谱
+      const prev = tutorialController.getState().prevGraphId;
+      const first = prev && store.getGraph(prev) ? prev : store.listGraphs()[0]?.id || '';
       if (first) {
         setGraphId(first);
         rebuildEngine(engineRef.current, first);
@@ -1200,7 +1345,227 @@ const GraphPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
 
-  // ---------- 详情卡数据 ----------
+  // ---------- 新人指引：图谱切换 / 取景 / 遮罩挖孔 / 首次提示 ----------
+  const tutActiveRef = useRef(false);
+  // 指引开始前的取景快照：教程结束/中断后原样恢复用户的视口与节点布局
+  const preTutViewRef = useRef<{
+    graphId: string;
+    k: number;
+    cx: number;
+    cy: number;
+    nodes: Array<{ id: string; x: number; y: number }>;
+  } | null>(null);
+
+  /** 进入教程切到示例图谱；结束/中断切回用户原图谱并恢复原取景与布局 */
+  useEffect(() => {
+    if (tut.active && !tutActiveRef.current) {
+      preTutViewRef.current = {
+        graphId,
+        k: viewRef.current.k,
+        cx: viewRef.current.center.x,
+        cy: viewRef.current.center.y,
+        nodes: (engineRef.current?.nodes || []).map(n => ({ id: n.id, x: n.x, y: n.y }))
+      };
+      if (store.tutorialActive && graphId !== store.tutorialGraphId) {
+        switchGraph(store.tutorialGraphId);
+      }
+    } else if (!tut.active && tutActiveRef.current) {
+      // 指引已结束/跳过/退出/切页中断：这时才持久化「已看过」，下次启动不再自动播放；
+      // 若中途杀进程（未走到这里），下次启动仍会自动重新播放
+      void markTutorialSeen().catch(err => console.error('[Tutorial] 标记指引已看过失败:', err));
+      const prev =
+        tut.prevGraphId && store.getGraph(tut.prevGraphId)
+          ? tut.prevGraphId
+          : store.listGraphs()[0]?.id || '';
+      const saved = preTutViewRef.current;
+      preTutViewRef.current = null;
+      if (prev) switchGraph(prev);
+      // 切回原图谱后：盖回指引前的节点坐标与视口，避免重新力学布局导致「换了张图」
+      if (saved && saved.graphId === prev && engineRef.current) {
+        saved.nodes.forEach(p => {
+          const n = engineRef.current?.nodeById(p.id);
+          if (n) {
+            n.x = p.x;
+            n.y = p.y;
+            n.vx = 0;
+            n.vy = 0;
+          }
+        });
+        viewRef.current.k = saved.k;
+        viewRef.current.center.x = saved.cx;
+        viewRef.current.center.y = saved.cy;
+        dirtyRef.current = true;
+        setTutTick(v => v + 1);
+      }
+      setPromptOpen(false);
+      store.linkPendingNodeId = null;
+    }
+    tutActiveRef.current = tut.active;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tut.active, version]);
+
+  /** 步骤取景：每个步骤聚焦自己的目标节点，保证挖孔目标在屏幕中央 */
+  useEffect(() => {
+    if (!tut.active) {
+      tutRingRef.current = null;
+      return;
+    }
+    const cam = TUTORIAL_STEPS[tut.stepIndex]?.camera;
+    if (!cam) return;
+    const id = cam.code === '@practice' ? tut.practiceNodeId : store.tutorialNodeIdOf(cam.code);
+    const env = envRef.current;
+    const node = id ? engineRef.current?.nodeById(id) : undefined;
+    if (!env || !node) return;
+    viewRef.current.k = cam.zoom ?? 0.9;
+    viewRef.current.center.x = node.x;
+    viewRef.current.center.y = node.y;
+    dirtyRef.current = true;
+    setTutTick(v => v + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tut.active, tut.stepIndex, tut.practiceNodeId, version, graphId]);
+
+  /** 遮罩挖孔：节点 / ＋－按钮 / 关系线 / 详情卡「关联名片」按钮 */
+  useEffect(() => {
+    if (!tut.active || !store.tutorialActive) {
+      setTutHole(null);
+      tutRingRef.current = null;
+      return;
+    }
+    const step = TUTORIAL_STEPS[tut.stepIndex];
+    const env = envRef.current;
+    const engine = engineRef.current;
+    if (!step || !env || !engine) {
+      setTutHole(null);
+      return;
+    }
+    const view = viewRef.current;
+    const k = view.k;
+    const toScreen = (wx: number, wy: number) => ({
+      x: (wx - view.center.x) * k + env.W / 2 + env.left,
+      y: (wy - view.center.y) * k + env.H / 2 + env.top
+    });
+    const nodeIdFor = (code?: string) =>
+      code === '@practice' ? tut.practiceNodeId : code ? store.tutorialNodeIdOf(code) : '';
+    const pad = step.target.padding ?? 10;
+
+    if (step.target.kind === 'detailLinkBtn') {
+      // DOM 元素（详情卡里的普通 View）：异步量矩形，布局未完成时重测一次
+      setTutHole(null);
+      tutRingRef.current = null;
+      let cancelled = false;
+      const measure = (retry: boolean) => {
+        void queryBox('#tutDetailLink').then(b => {
+          if (cancelled) return;
+          if (b) setTutHole(b);
+          else if (retry) setTimeout(() => measure(false), 150);
+        });
+      };
+      measure(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const node = nodeIdFor(step.target.code) ? engine.nodeById(nodeIdFor(step.target.code)) : undefined;
+    let box: TutorialHole | null = null;
+    let ring: { x: number; y: number; r: number } | null = null;
+
+    if (step.target.kind === 'node' && node) {
+      const r = R_NODE * k + pad;
+      const p = toScreen(node.x, node.y);
+      box = { x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
+      ring = { x: node.x, y: node.y, r: R_NODE + 9 };
+    } else if ((step.target.kind === 'addBtn' || step.target.kind === 'delBtn') && node) {
+      // 只圈 ＋/－ 按钮本身：不把节点头像一起并进挖孔，否则用户可以直接点节点
+      const btn = actionButtonsOf(node.id).find(b => b.key === (step.target.kind === 'addBtn' ? 'add' : 'del'));
+      if (btn && actionTargetRef.current === node.id) {
+        const br = BTN_R + pad;
+        box = { x: btn.x + env.left - br, y: btn.y + env.top - br, w: br * 2, h: br * 2 };
+      } else {
+        // 操作按钮尚未展开（例如删除步骤要先长按新成员）：先圈节点本身
+        const r = R_NODE * k + pad;
+        const p = toScreen(node.x, node.y);
+        box = { x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
+      }
+    } else if (step.target.kind === 'edge') {
+      const link = engine.links.find(l => l.id === tut.practiceEdgeId);
+      if (link) {
+        const r = 36;
+        const p = toScreen((link.s.x + link.t.x) / 2, (link.s.y + link.t.y) / 2);
+        box = { x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
+      }
+    }
+
+    setTutHole(box);
+    tutRingRef.current = ring;
+    dirtyRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tut.active, tut.stepIndex, tut.practiceNodeId, version, selectedId, tutTick, graphId]);
+
+  /**
+   * 首登自动进入指引：首次进入图谱页（引擎就绪 + 首登已播种图谱）直接载入示例数据，
+   * 不弹「开始/取消」提示；标记只消费一次，结束/跳过/中断后不再自动出现
+   */
+  useEffect(() => {
+    if (!engineReady || !store.pendingFirstLoginTutorial) return;
+    if (!store.getGraph(graphId)) return;
+    store.pendingFirstLoginTutorial = false;
+    setPromptOpen(false);
+    tutorialController.markPromptSeen();
+    tutorialController.start(graphId);
+    perfMark('自动进入新人指引');
+    console.info('[Tutorial] 首登自动进入新人指引');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engineReady, version, graphId]);
+
+  /** 跨页步骤「选择名片」由名片页渲染：记录交接时序（排查切页闪两下） */
+  useEffect(() => {
+    if (tut.active && tutStep?.advance === 'cardBound') {
+      dbg('tutCrossPageHandoff', { step: tut.stepIndex, graphId });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tut.active, tut.stepIndex, graphId]);
+
+  /** 首次进入提示：引擎就绪 + 有真实图谱时只弹一次 */
+  useEffect(() => {
+    if (!engineReady || store.tutorialActive || promptCheckedRef.current) return;
+    if (!store.getGraph(graphId)) return;
+    promptCheckedRef.current = true;
+    if (tutorialController.promptSeen()) return;
+    setPromptOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engineReady, version, graphId]);
+
+  const startTutorial = (resume: boolean) => {
+    tutorialController.markPromptSeen();
+    setPromptOpen(false);
+    if (resume && tutorialController.resume()) return;
+    tutorialController.start(graphId);
+  };
+
+  /** 左上角问号：无进度从头开始；有快照续播/重开；进行中继续/退出 */
+  const openTutorialMenu = () => {
+    if (store.tutorialActive) {
+      void Taro.showActionSheet({ itemList: ['继续指引', '退出指引'] })
+        .then(res => {
+          if (res.tapIndex === 1) tutorialController.exit();
+        })
+        .catch(() => {});
+      return;
+    }
+    if (tutorialController.hasSnapshot()) {
+      void Taro.showActionSheet({ itemList: ['继续指引', '重新开始'] })
+        .then(res => {
+          if (res.tapIndex === 0) startTutorial(true);
+          else if (res.tapIndex === 1) startTutorial(false);
+        })
+        .catch(() => {});
+      return;
+    }
+    startTutorial(false);
+  };
+
+
   const selectedNode = selectedId ? store.getNode(selectedId) : undefined;
   const selectedCard = selectedNode?.cardId ? store.getCard(selectedNode.cardId) : undefined;
   const displayName = selectedNode ? nameOfNode(selectedNode) : selectedCard?.name || '';
@@ -1225,12 +1590,25 @@ const GraphPage: React.FC = () => {
     const n = store.getNode(nodeId);
     dbg('openLinkCard', { nodeId, name: n ? nameOfNode(n) : '' });
     store.linkPendingNodeId = nodeId;
+    // 教程：先推进到「选择名片」，再切页（graph hide 时该步骤属于预期跳转，不中断）
+    if (nodeId === tut.practiceNodeId) tutorialController.notify('linkPending');
     closeCard();
     Taro.switchTab({ url: '/pages/card/index' });
   };
 
   // 离开图谱页期间的画布尺寸变化兜底定时器（回页面校准用）
   const showResizeTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  // 离开图谱页：
+  // 教程进行中且不是「去名片页选名片」这一步 → 视为中断（保存快照、清空示例数据）
+  useDidHide(() => {
+    if (!store.tutorialActive) return;
+    const st = tutorialController.getState();
+    if (st.stepIndex !== 5) {
+      tutorialController.interrupt();
+      store.linkPendingNodeId = null;
+    }
+  });
 
   // 回到图谱页：
   // 1) 重启渲染循环（页面隐藏期间 RAF 被节流/暂停，devtools 下可能不恢复，
@@ -1355,12 +1733,20 @@ const GraphPage: React.FC = () => {
       <CoverView className={styles.pillWrap} style={{ top: statusBarH + 66 }}>
         <CoverView
           className={styles.pill}
-          onClick={graph ? () => setGraphMenuOpen(v => !v) : openCreate}
+          // 指引期间禁用图谱切换，避免中途换图打断步骤
+          onClick={
+            store.tutorialActive ? () => {} : graph ? () => setGraphMenuOpen(v => !v) : openCreate
+          }
         >
           <CoverView className={styles.pillEmoji}>{graph ? '📚' : '＋'}</CoverView>
           <CoverView className={styles.pillName}>{graph ? graphName : '创建新图谱'}</CoverView>
           <CoverView className={styles.pillArrow}>{graph ? (graphMenuOpen ? '▴' : '▾') : ''}</CoverView>
         </CoverView>
+      </CoverView>
+
+      {/* 左上角常驻问号：随时重学新人指引（有进度可续播），与微信胶囊按钮垂直居中对齐 */}
+      <CoverView className={styles.tutHelp} style={{ top: tutHelpTop }} onClick={openTutorialMenu}>
+        ?
       </CoverView>
 
       {/* 药丸展开面板：已有图谱（类型/人数）+ 新建图谱 */}
@@ -1423,7 +1809,11 @@ const GraphPage: React.FC = () => {
                     </View>
                   ) : (
                     // 未关联名片：名称旁的「关联名片」按钮 → 跳名片页选择
-                    <View className={styles.editBtn} onClick={() => openLinkCard(selectedNode.id)}>
+                    <View
+                      id={selectedNode.id === tut.practiceNodeId ? 'tutDetailLink' : undefined}
+                      className={styles.editBtn}
+                      onClick={() => openLinkCard(selectedNode.id)}
+                    >
                       <Text className={styles.editIcon}>🔗</Text>
                       <Text className={styles.editText}>关联名片</Text>
                     </View>
@@ -1582,6 +1972,51 @@ const GraphPage: React.FC = () => {
           </View>
           </View>
         </View>
+      ) : null}
+
+      {/* 首次进入提示：不加载示例数据，点「开始」才载入 */}
+      {promptOpen ? (
+        <CoverView className={styles.promptMask}>
+          <CoverView className={styles.promptCard}>
+            <CoverView className={styles.promptTitle}>欢迎使用家族图谱</CoverView>
+            <CoverView className={styles.promptDesc}>
+              花一分钟学会：长按成员、添加成员、关联名片、修改关系、删除成员。
+            </CoverView>
+            <CoverView className={styles.promptDesc}>
+              会载入一份家族示例数据，指引结束后自动删除，不影响你的真实数据。
+            </CoverView>
+            <CoverView className={styles.promptActions}>
+              <CoverView
+                className={styles.promptCancel}
+                onClick={() => {
+                  tutorialController.markPromptSeen();
+                  setPromptOpen(false);
+                }}
+              >
+                取消
+              </CoverView>
+              <CoverView className={styles.promptStart} onClick={() => startTutorial(false)}>
+                开始
+              </CoverView>
+            </CoverView>
+          </CoverView>
+        </CoverView>
+      ) : null}
+
+      {/* 新人指引遮罩：挖孔 + 气泡。
+          跨页步骤「选择名片」(advance=cardBound) 由名片页自己渲染：
+          如果图谱页也渲染，切 tab 过程中同一段引导会出现两次（闪两下）。 */}
+      {tut.active && store.tutorialActive && tutStep && tutStep.advance !== 'cardBound' ? (
+        <TutorialOverlay
+          step={tutStep}
+          index={tut.stepIndex}
+          total={TUTORIAL_STEPS.length}
+          hole={tutHole}
+          waiting={tutStep.advance !== 'manual'}
+          onNext={() => tutorialController.next()}
+          onSkip={() => tutorialController.skip()}
+          onExit={() => tutorialController.exit()}
+        />
       ) : null}
     </View>
   );

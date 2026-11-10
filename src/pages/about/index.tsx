@@ -77,7 +77,7 @@ const AboutPage: React.FC = () => {
             </View>
             <View className={styles.infoRow}>
               <Text className={styles.infoLabel}>备案号</Text>
-              <Text className={styles.infoValue}>浙ICP备2026012345号</Text>
+              <Text className={styles.infoValue}>浙ICP备2025175380号-2X</Text>
             </View>
           </View>
         </View>

@@ -10,6 +10,8 @@ import type {
   NodeInput
 } from '@/types';
 import { dbList, dbAdd, dbUpdate, dbRemove, callFunction } from '@/services/cloud';
+import { buildTutorialDataset, type TutorialDataset } from '@/tutorial/loader';
+import { perfMark } from '@/utils/perf';
 
 let seq = 0;
 function uid(prefix: string): string {
@@ -37,11 +39,11 @@ class Store {
    */
   linkPendingNodeId: string | null = null;
 
-  /**
-   * 跨页暂存：首登引导完成后的落地页（非响应式，仅页面间传递）
-   * 分享落地的新用户先走一键授权引导，完成后打开被分享的名片详情（而不是图谱首页）
-   */
-  onboardRedirect: string | null = null;
+  /** 首登建名片是否刚完成：图谱页消费一次后自动进入新人指引（本次会话有效） */
+  pendingFirstLoginTutorial = false;
+
+  /** 本次会话是否处于首登（未授权）流程：点「未完善」节点先走一键授权 */
+  firstLoginFlow = false;
 
   /** 当前用户 openid（账号锚点，登录后写入；卡片归属/认领/持有关系以此为准） */
   userOpenId = '';
@@ -59,6 +61,21 @@ class Store {
 
   /** 卡片是否已从云端加载完成（首屏 loading 用） */
   cardsReady = false;
+
+  // ============ 新人指引沙箱（只进内存，绝不写云端） ============
+  /** 教程进行中：所有写操作只改沙箱数组，pushToCloud 整体短路 */
+  tutorialActive = false;
+  /** 当前教程批次 id（示例实体 id 前缀 tut-<batch>-） */
+  tutorialBatchId = '';
+  /** 教程图谱 id */
+  tutorialGraphId = '';
+  /** 教程「我」节点 id（guide 里 g1 节点） */
+  tutorialEgoNodeId = '';
+  private tutorialCards: Card[] = [];
+  private tutorialNodes: GraphNode[] = [];
+  private tutorialEdges: Edge[] = [];
+  private tutorialGraphs: Graph[] = [];
+  private tutorialDataset: TutorialDataset | null = null;
 
   /** 版本号：每次数据变更自增，供 useStoreVersion 触发重渲染 */
   version = 0;
@@ -87,6 +104,7 @@ class Store {
     this.cards = first;
     this.cardsReady = true;
     this.emit();
+    perfMark('卡片首批载入完成', { count: this.cards.length });
     console.info('[Store] 卡片已从云端载入：%d 张', this.cards.length);
     // 后台补拉剩余（不阻塞首屏），每批落进内存并通知页面刷新
     if (!exhausted) this.loadRemainingCards(skip);
@@ -110,6 +128,7 @@ class Store {
         if (s >= 1000) break; // 安全阀，防异常时死循环
       }
       console.info('[Store] 卡片后台补全完成：共 %d 张', this.cards.length);
+      perfMark('卡片后台补全完成', { count: this.cards.length });
     } catch (err) {
       console.error('[Store] 卡片后台补拉失败:', err);
     }
@@ -127,6 +146,52 @@ class Store {
     this.listeners.forEach(fn => fn());
   }
 
+  /** 首登建名片完成：标记图谱页自动进入新人指引（emit 让已挂载的图谱页立即感知） */
+  markFirstLoginTutorialPending(): void {
+    this.pendingFirstLoginTutorial = true;
+    this.emit();
+  }
+
+  /**
+   * 首登播种：确保有「我的名片」+ 一张图谱 + 图谱里的「我」节点
+   * - 名片必须先写云端（节点要引用名片 id）
+   * - 图谱/节点沿用既有「内存 + 云端穿透」写路径
+   * - 幂等：已有我的名片 / 已有图谱时不会重复创建
+   */
+  async seedFirstLoginAccount(): Promise<void> {
+    let my = this.getMyCard();
+    if (!my) {
+      my = await this.createCard({
+        name: '',
+        template: 'custom',
+        customFields: [],
+        phone: '',
+        company: '',
+        title: '',
+        avatar: '',
+        photos: [],
+        note: '',
+        isMe: true,
+        createdAt: new Date().toISOString()
+      });
+      console.info('[Store] 首登播种：已创建我的名片 %s', my.id);
+      perfMark('我的名片创建完成');
+    }
+    if (this.listGraphs().length === 0) {
+      const graph = this.createGraph({
+        name: '我的图谱',
+        type: 'custom',
+        typeLabel: '',
+        coverColor: '#d9c9dd',
+        createdAt: new Date().toISOString(),
+        avatar: ''
+      });
+      this.createNode({ graphId: graph.id, cardId: my.id, role: '我', gen: 1 });
+      console.info('[Store] 首登播种：已创建图谱 %s 与「我」节点', graph.id);
+      perfMark('默认图谱与节点创建完成');
+    }
+  }
+
   /** 登录成功后写入账号锚点（替换本地 mock 用户） */
   setUserOpenId(openId: string): void {
     this.userOpenId = openId;
@@ -137,22 +202,24 @@ class Store {
   // ============ 名片 Card ============
 
   listCards(): Card[] {
-    return this.cards;
+    return this.tutorialActive ? this.cards.concat(this.tutorialCards) : this.cards;
   }
 
   getCard(id: string): Card | undefined {
-    return this.cards.find(c => c.id === id);
+    return this.cards.find(c => c.id === id) || this.tutorialCards.find(c => c.id === id);
   }
 
+  /** 我的名片只看真实数据：教程示例卡（isMe 已置 false）永不顶掉用户名片 */
   getMyCard(): Card | undefined {
     return this.cards.find(c => c.isMe);
   }
 
   /** 按姓名 / 电话 / 公司模糊搜索 */
   searchCards(keyword: string): Card[] {
+    const all = this.listCards();
     const kw = keyword.trim().toLowerCase();
-    if (!kw) return this.cards;
-    return this.cards.filter(c =>
+    if (!kw) return all;
+    return all.filter(c =>
       [c.name, c.phone, c.company, c.title].some(v => v.toLowerCase().includes(kw))
     );
   }
@@ -163,6 +230,12 @@ class Store {
    */
   async createCard(input: CardInput): Promise<Card> {
     const card: Card = { ...input, id: uid('card') };
+    if (this.tutorialActive) {
+      // 教程期间只进沙箱，不写云端
+      this.tutorialCards.push(card);
+      this.emit();
+      return card;
+    }
     await dbAdd('cards', { ...card, ...this.docOwner() });
     this.cards.push(card);
     this.emit();
@@ -171,7 +244,13 @@ class Store {
   }
 
   updateCard(id: string, patch: Partial<CardInput>): void {
-    const card = this.getCard(id);
+    const tut = this.tutorialCards.find(c => c.id === id);
+    if (tut) {
+      Object.assign(tut, patch);
+      this.emit();
+      return;
+    }
+    const card = this.cards.find(c => c.id === id);
     if (!card) {
       console.error('[Store] 更新名片失败：不存在 %s', id);
       return;
@@ -185,6 +264,12 @@ class Store {
 
   /** 删除名片：图谱中引用它的节点变为匿名节点（引用置空，不报错；云端节点同步清空 cardId） */
   deleteCard(id: string): void {
+    if (this.tutorialCards.some(c => c.id === id)) {
+      this.tutorialCards = this.tutorialCards.filter(c => c.id !== id);
+      this.tutorialNodes = this.tutorialNodes.map(n => (n.cardId === id ? { ...n, cardId: null } : n));
+      this.emit();
+      return;
+    }
     this.cards = this.cards.filter(c => c.id !== id);
     let orphan = 0;
     this.nodes = this.nodes.map(n => {
@@ -206,6 +291,8 @@ class Store {
 
   /** 写穿透：内存已先生效，云端异步落库；失败直接报出来（不静默吞掉） */
   private pushToCloud(action: string, fn: () => Promise<unknown>): void {
+    // 教程模式：沙箱数据绝不写云端
+    if (this.tutorialActive) return;
     fn().catch(err => {
       console.error('[Store] %s同步云端失败:', action, err);
     });
@@ -352,6 +439,7 @@ class Store {
     this.nodes = nodes;
     this.edges = edges;
     this.emit();
+    perfMark('图谱数据载入完成', { graphs: graphs.length, nodes: nodes.length, edges: edges.length });
     console.info('[Store] 图谱数据已从云端载入：图谱 %d / 节点 %d / 关系 %d', graphs.length, nodes.length, edges.length);
   }
 
@@ -370,11 +458,11 @@ class Store {
   // ============ 图谱 Graph ============
 
   listGraphs(): Graph[] {
-    return this.graphs;
+    return this.tutorialActive ? this.graphs.concat(this.tutorialGraphs) : this.graphs;
   }
 
   getGraph(id: string): Graph | undefined {
-    return this.graphs.find(g => g.id === id);
+    return this.graphs.find(g => g.id === id) || this.tutorialGraphs.find(g => g.id === id);
   }
 
   createGraph(input: GraphInput): Graph {
@@ -419,15 +507,21 @@ class Store {
   // ============ 节点 Node ============
 
   listNodes(graphId?: string): GraphNode[] {
-    return graphId ? this.nodes.filter(n => n.graphId === graphId) : this.nodes;
+    const all = this.tutorialActive ? this.nodes.concat(this.tutorialNodes) : this.nodes;
+    return graphId ? all.filter(n => n.graphId === graphId) : all;
   }
 
   getNode(id: string): GraphNode | undefined {
-    return this.nodes.find(n => n.id === id);
+    return this.nodes.find(n => n.id === id) || this.tutorialNodes.find(n => n.id === id);
   }
 
   createNode(input: NodeInput): GraphNode {
     const node: GraphNode = { ...input, id: uid('node') };
+    if (this.tutorialActive && input.graphId === this.tutorialGraphId) {
+      this.tutorialNodes.push(node);
+      this.emit();
+      return node;
+    }
     this.nodes.push(node);
     this.emit();
     this.pushToCloud('创建节点', () =>
@@ -437,7 +531,13 @@ class Store {
   }
 
   updateNode(id: string, patch: Partial<NodeInput>): void {
-    const node = this.getNode(id);
+    const tut = this.tutorialNodes.find(n => n.id === id);
+    if (tut) {
+      Object.assign(tut, patch);
+      this.emit();
+      return;
+    }
+    const node = this.nodes.find(n => n.id === id);
     if (!node) {
       console.error('[Store] 更新节点失败：不存在 %s', id);
       return;
@@ -478,6 +578,12 @@ class Store {
 
   /** 删除节点：同步删除其所有关系（云端一并清理） */
   deleteNode(id: string): void {
+    if (this.tutorialNodes.some(n => n.id === id)) {
+      this.tutorialNodes = this.tutorialNodes.filter(n => n.id !== id);
+      this.tutorialEdges = this.tutorialEdges.filter(e => e.source !== id && e.target !== id);
+      this.emit();
+      return;
+    }
     this.nodes = this.nodes.filter(n => n.id !== id);
     const removedEdgeIds = this.edges.filter(e => e.source === id || e.target === id).map(e => e.id);
     this.edges = this.edges.filter(e => e.source !== id && e.target !== id);
@@ -494,15 +600,21 @@ class Store {
   // ============ 关系 Edge ============
 
   listEdges(graphId?: string): Edge[] {
-    return graphId ? this.edges.filter(e => e.graphId === graphId) : this.edges;
+    const all = this.tutorialActive ? this.edges.concat(this.tutorialEdges) : this.edges;
+    return graphId ? all.filter(e => e.graphId === graphId) : all;
   }
 
   getEdge(id: string): Edge | undefined {
-    return this.edges.find(e => e.id === id);
+    return this.edges.find(e => e.id === id) || this.tutorialEdges.find(e => e.id === id);
   }
 
   createEdge(input: EdgeInput): Edge {
     const edge: Edge = { ...input, id: uid('edge') };
+    if (this.tutorialActive && input.graphId === this.tutorialGraphId) {
+      this.tutorialEdges.push(edge);
+      this.emit();
+      return edge;
+    }
     this.edges.push(edge);
     this.emit();
     this.pushToCloud('创建关系', () =>
@@ -512,7 +624,13 @@ class Store {
   }
 
   updateEdge(id: string, patch: Partial<EdgeInput>): void {
-    const edge = this.getEdge(id);
+    const tut = this.tutorialEdges.find(e => e.id === id);
+    if (tut) {
+      Object.assign(tut, patch);
+      this.emit();
+      return;
+    }
+    const edge = this.edges.find(e => e.id === id);
     if (!edge) {
       console.error('[Store] 更新关系失败：不存在 %s', id);
       return;
@@ -525,6 +643,11 @@ class Store {
   }
 
   deleteEdge(id: string): void {
+    if (this.tutorialEdges.some(e => e.id === id)) {
+      this.tutorialEdges = this.tutorialEdges.filter(e => e.id !== id);
+      this.emit();
+      return;
+    }
     this.edges = this.edges.filter(e => e.id !== id);
     this.emit();
     this.pushToCloud('删除关系', () =>
@@ -542,13 +665,110 @@ class Store {
 
   /** 名片出现在哪些图谱里（详情页"所属图谱"展示） */
   listGraphsOfCard(cardId: string): Graph[] {
-    const graphIds = new Set(this.nodes.filter(n => n.cardId === cardId).map(n => n.graphId));
-    return this.graphs.filter(g => graphIds.has(g.id));
+    const graphIds = new Set(this.listNodes().filter(n => n.cardId === cardId).map(n => n.graphId));
+    return this.listGraphs().filter(g => graphIds.has(g.id));
   }
 
   /** 图谱类型默认布局用的关系标签集合由 mock/presets 提供，这里按类型取图谱 */
   listGraphsByType(type: GraphType): Graph[] {
-    return this.graphs.filter(g => g.type === type);
+    return this.listGraphs().filter(g => g.type === type);
+  }
+
+  // ============ 新人指引沙箱 ============
+
+  /** 教程节点 code（p1/g1…）→ 当前批次实体 id */
+  tutorialNodeIdOf(code: string): string {
+    return this.tutorialDataset?.codeToNodeId.get(code) || '';
+  }
+
+  tutorialCardIdOf(code: string): string {
+    return this.tutorialDataset?.codeToCardId.get(code) || '';
+  }
+
+  /** 判断某名片是否示例数据（页面角标 / 禁止删除用） */
+  isTutorialCard(id: string): boolean {
+    return this.tutorialCards.some(c => c.id === id);
+  }
+
+  isTutorialNode(id: string): boolean {
+    return this.tutorialNodes.some(n => n.id === id);
+  }
+
+  /**
+   * 载入家族示例数据到沙箱（只取 family，不含公司图谱）
+   * @param batchId 续播时传入快照里的批次 id，保证实体 id 与上次一致
+   */
+  loadTutorialFamily(batchId?: string): void {
+    this.resetTutorial();
+    const ds = buildTutorialDataset(batchId);
+    this.tutorialDataset = ds;
+    this.tutorialGraphs = [ds.graph];
+    this.tutorialCards = ds.cards;
+    this.tutorialNodes = ds.nodes;
+    this.tutorialEdges = ds.edges;
+    this.tutorialBatchId = ds.batchId;
+    this.tutorialGraphId = ds.graph.id;
+    this.tutorialEgoNodeId = ds.codeToNodeId.get('g1') || '';
+    this.tutorialActive = true;
+    this.emit();
+    console.info(
+      '[Store] 教程沙箱已载入：批次 %s（图谱 1 / 节点 %d / 关系 %d / 名片 %d）',
+      ds.batchId,
+      ds.nodes.length,
+      ds.edges.length,
+      ds.cards.length
+    );
+  }
+
+  /** 续播重建：把练习节点/关系按快照恢复进沙箱 */
+  restoreTutorialPractice(
+    nodeId: string,
+    edgeId: string,
+    sourceNodeId: string,
+    cardId: string | null
+  ): void {
+    if (!this.tutorialActive || !nodeId) return;
+    if (!this.tutorialNodes.some(n => n.id === nodeId)) {
+      this.tutorialNodes.push({
+        id: nodeId,
+        graphId: this.tutorialGraphId,
+        cardId,
+        role: '成员',
+        gen: 3
+      });
+    }
+    if (edgeId && !this.tutorialEdges.some(e => e.id === edgeId)) {
+      this.tutorialEdges.push({
+        id: edgeId,
+        graphId: this.tutorialGraphId,
+        source: sourceNodeId,
+        target: nodeId,
+        type: 'custom',
+        label: '关系'
+      });
+    }
+    this.emit();
+  }
+
+  /** 清空沙箱（不写云端、不删真实数据） */
+  clearTutorialData(): void {
+    if (!this.tutorialActive) return;
+    this.resetTutorial();
+    this.emit();
+    console.info('[Store] 教程沙箱已清空（真实数据未触碰）');
+  }
+
+  /** 内部复位：不做 emit，供 load/clear 复用 */
+  private resetTutorial(): void {
+    this.tutorialActive = false;
+    this.tutorialBatchId = '';
+    this.tutorialGraphId = '';
+    this.tutorialEgoNodeId = '';
+    this.tutorialCards = [];
+    this.tutorialNodes = [];
+    this.tutorialEdges = [];
+    this.tutorialGraphs = [];
+    this.tutorialDataset = null;
   }
 }
 

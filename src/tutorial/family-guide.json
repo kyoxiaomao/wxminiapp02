@@ -1,0 +1,70 @@
+[
+  {
+    "id": "welcome",
+    "title": "新人指引",
+    "desc": "用示例数据演示 5 个操作，结束后自动清除。",
+    "target": { "kind": "none" },
+    "advance": "manual",
+    "allowPrev": false
+  },
+  {
+    "id": "longPress",
+    "title": "长按成员",
+    "desc": "长按「我」的头像。",
+    "target": { "kind": "node", "code": "g1", "padding": 14 },
+    "camera": { "code": "g1", "zoom": 0.9 },
+    "advance": "longPress"
+  },
+  {
+    "id": "addNode",
+    "title": "添加成员",
+    "desc": "点绿色的 ＋。",
+    "target": { "kind": "addBtn", "code": "g1", "padding": 10 },
+    "advance": "nodeAdded"
+  },
+  {
+    "id": "openDetail",
+    "title": "打开详情",
+    "desc": "点一下新成员。",
+    "target": { "kind": "node", "code": "@practice", "padding": 14 },
+    "camera": { "code": "@practice", "zoom": 1 },
+    "advance": "detailOpened"
+  },
+  {
+    "id": "linkCard",
+    "title": "关联名片",
+    "desc": "点「关联名片」。",
+    "target": { "kind": "detailLinkBtn", "padding": 8 },
+    "advance": "linkPending"
+  },
+  {
+    "id": "pickCard",
+    "title": "选择名片",
+    "desc": "点 🔗 关联给新成员。",
+    "target": { "kind": "none" },
+    "advance": "cardBound"
+  },
+  {
+    "id": "editEdge",
+    "title": "修改关系",
+    "desc": "点关系线上的文字改名。",
+    "target": { "kind": "edge", "code": "@practice", "padding": 18 },
+    "camera": { "code": "@practice", "zoom": 1 },
+    "advance": "edgeChanged"
+  },
+  {
+    "id": "deleteNode",
+    "title": "删除成员",
+    "desc": "长按新成员，点红色 －。",
+    "target": { "kind": "delBtn", "code": "@practice", "padding": 10 },
+    "advance": "nodeDeleted"
+  },
+  {
+    "id": "done",
+    "title": "完成了",
+    "desc": "点完成，清除示例数据。",
+    "target": { "kind": "none" },
+    "advance": "manual",
+    "allowPrev": false
+  }
+]

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Button, Input } from '@tarojs/components';
+import { View, Text, Button } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { store } from '@/store';
 import { completeOnboarding, setDemoMode } from '@/services/auth';
@@ -33,19 +33,16 @@ const OnboardingPage: React.FC = () => {
     );
   };
 
-  /** 引导完成入口：分享落地来的打开被分享的名片详情，否则进图谱首页 */
-  const finishAndEnter = () => {
-    const target = store.onboardRedirect;
-    store.onboardRedirect = null;
-    if (target) {
-      console.info('[Onboarding] 分享落地：打开被分享的名片详情');
-      Taro.redirectTo({ url: target }).catch(err => {
-        console.error('[Onboarding] 打开名片详情失败:', err);
-        goGraph();
-      });
-    } else {
-      goGraph();
+  /** 授权完成 / 先完善资料：进入「我的名片」详情（姓名输入自动聚焦） */
+  const goMyCardDetail = (cardId?: string) => {
+    const id = cardId || store.getMyCard()?.id || '';
+    if (!id) {
+      console.error('[Onboarding] 未找到我的名片，无法进入名片详情');
+      return;
     }
+    Taro.redirectTo({ url: `/pages/card/detail/index?id=${id}&focusName=1` }).catch(err =>
+      console.error('[Onboarding] 打开名片详情失败:', err)
+    );
   };
 
   /** 账号密码登录（平台审核用）：验证通过后服务端把演示账号数据复制到本人名下 */
@@ -67,7 +64,7 @@ const OnboardingPage: React.FC = () => {
       await store.loadGraphsFromCloud();
       toast.hideLoading();
       toast.success('登录成功，已载入演示数据');
-      setTimeout(finishAndEnter, 300);
+      setTimeout(goGraph, 300);
     } catch (err) {
       console.error('[Onboarding] 账号密码登录失败:', err);
       toast.hideLoading();
@@ -121,7 +118,7 @@ const OnboardingPage: React.FC = () => {
       await completeOnboarding(profile);
       toast.hideLoading();
       toast.success('我的名片已创建');
-      setTimeout(finishAndEnter, 300);
+      setTimeout(() => goMyCardDetail(my?.id), 300);
     } catch (err) {
       // 失败留在本页暴露问题（不跳走、不假成功）
       console.error('[Onboarding] 创建我的名片失败:', err);
@@ -162,30 +159,7 @@ const OnboardingPage: React.FC = () => {
         <Text className={styles.title}>名片图谱</Text>
         <View className={styles.titleBar} />
 
-        {/* 账号密码登录（平台审核用）：常显 */}
-        <View className={styles.accountForm}>
-          <Input
-            className={styles.accountInput}
-            value={account}
-            placeholder="账号"
-            placeholderClass={styles.placeholder}
-            onInput={e => setAccount(e.detail.value)}
-          />
-          <Input
-            className={styles.accountInput}
-            password
-            value={password}
-            placeholder="密码"
-            placeholderClass={styles.placeholder}
-            onInput={e => setPassword(e.detail.value)}
-          />
-          <View
-            className={`${styles.accountBtn} ${accountLoading ? styles.authBtnDisabled : ''}`}
-            onClick={handleAccountLogin}
-          >
-            <Text className={styles.accountBtnText}>{accountLoading ? '登录中…' : '登录'}</Text>
-          </View>
-        </View>
+        {/* 账号密码登录表单已按需求隐藏（云函数入口保留，需要平台审核时可临时打开） */}
 
         <Button
           className={`${styles.authBtn} ${loading ? styles.authBtnDisabled : ''}`}
@@ -195,7 +169,12 @@ const OnboardingPage: React.FC = () => {
           <Text className={styles.authBtnText}>{loading ? '创建中…' : '一键授权登录'}</Text>
         </Button>
 
-        <Text className={styles.icp}>浙ICP备2026012345号，杭州极星智能科技有限公司</Text>
+        {/* 取消授权不阻断：可直接去名片详情先填姓名/头像，手机号以后再补 */}
+        <Text className={styles.skipLink} onClick={() => goMyCardDetail()}>
+          先完善资料，稍后授权
+        </Text>
+
+        <Text className={styles.icp}>浙ICP备2025175380号-2X，杭州极星智能科技有限公司</Text>
       </View>
     </View>
   );

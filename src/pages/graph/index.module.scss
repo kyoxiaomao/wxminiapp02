@@ -707,3 +707,86 @@
   font-size: 13px;
   color: $color-text-tertiary;
 }
+
+// ---------- 新人指引：问号入口 + 首次提示 ----------
+.tutHelp {
+  position: fixed;
+  left: 14px;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 60, 152, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  color: #7d3c98;
+  font-size: 15px;
+  font-weight: 700;
+  z-index: 31;
+}
+
+.promptMask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 12, 26, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 61;
+}
+
+.promptCard {
+  width: 300px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.promptTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: #3b2a44;
+}
+
+.promptDesc {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #5d4a68;
+}
+
+.promptActions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.promptCancel {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid #d9c9dd;
+  font-size: 13px;
+  color: #6d3b83;
+}
+
+.promptStart {
+  margin-left: 10px;
+  height: 32px;
+  line-height: 32px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: #7d3c98;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}

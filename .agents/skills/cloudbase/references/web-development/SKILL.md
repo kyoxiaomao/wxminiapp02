@@ -1,7 +1,7 @@
 ---
 name: web-development
 description: Use when users need to implement, integrate, debug, build, deploy, or validate a Web frontend after the product direction is already clear, especially for React, Vue, Vite, browser flows, or CloudBase Web integration.
-version: 2.35.1
+version: 2.36.0
 license: MIT
 alwaysApply: false
 ---
@@ -177,6 +177,7 @@ Use this section only when the Web project needs CloudBase platform features.
 
 ### Static hosting defaults
 
+- **Name the deployment path — do not just say "deploy to static hosting".** A first-time frontend deploy goes through `manageApps({ action: "deployApp", ... })`: each app gets its own subdomain and keeps a version history (`queryApps({ action: "getAppVersion" })` lists releases, `manageApps({ action: "deleteAppVersion" })` removes one), which is what makes rollback possible. A project originally deployed through hosting (shared domain path) keeps using `manageHosting({ action: "upload", ... })`. Never fall back to `tcb deploy`.
 - Build before deployment
 - Prefer relative asset paths for static hosting compatibility
 - Use hash routing by default when the project lacks server-side route rewrites

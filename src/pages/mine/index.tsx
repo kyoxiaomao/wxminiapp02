@@ -125,7 +125,7 @@ const MinePage: React.FC = () => {
           </View>
         </View>
 
-        <Text className={styles.icp}>浙ICP备2026012345号，杭州极星智能科技有限公司</Text>
+        <Text className={styles.icp}>浙ICP备2025175380号-2X，杭州极星智能科技有限公司</Text>
       </View>
     </View>
   );

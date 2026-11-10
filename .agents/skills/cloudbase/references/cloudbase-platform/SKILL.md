@@ -1,7 +1,7 @@
 ---
 name: cloudbase-platform
 description: CloudBase platform overview and routing guide. This skill should be used when users need high-level capability selection, platform concepts, console navigation, realtime (broadcast / presence / live database changes), or cross-platform best practices before choosing a more specific implementation skill.
-version: 2.35.1
+version: 2.36.0
 license: MIT
 alwaysApply: false
 ---
@@ -17,7 +17,7 @@ If a referenced sibling skill file is missing from this environment, ask the use
 - Deployment Gate: `references/protocols/deployment-gate.md`
 - Sensitive Runtime Data Protection: `references/protocols/sensitive-runtime-data-protection.md`
 
-**Post-deployment (optional, non-intrusive)**: after a deployment is verified successful, you may offer at most once to generate anonymized shareables and, in that same offer, optionally submit the work to the case wall (Deployment Share) — see `references/protocols/deployment-share.md`. Never follow up if declined; never publish or submit on the user's behalf.
+**Post-deployment (optional, non-intrusive)**: after a deployment is verified successful, you may offer at most once to generate anonymized shareables (Deployment Share) — see `references/protocols/deployment-share.md`. Deliver the card, the copy and the case-wall entry in one reply; shareables only if that is all the user asked for. Never follow up if declined; never publish or submit on the user's behalf.
 
 ## Activation Contract
 
@@ -142,6 +142,10 @@ When a CloudBase tool call fails and the error message contains a specific error
    - Control-plane cloud API error codes: `https://cloud.tencent.com/document/product/876/34823`
 4. Never assert capability-per-plan or error-code semantics from memory — official docs and the console plan comparison are the only authoritative sources. Example: for Web 安全域名 plan requirements, cite `https://cloud.tencent.com/document/product/876/127357` rather than assuming which tier unlocks it.
 
+**Billing and service-stop codes are a special case: the code's own reading is misleading, so diagnose before acting.** When a failure is `InsufficientBalance` (a cloud function answers it with HTTP 410), `EXCEED_REQUEST_LIMIT`, or a service that is simply down, `InsufficientBalance` reads as an account problem and is not one: what runs out is the **environment's resource points**, which are drawn down ahead of any account balance (plan quota → resource packs → pay-as-you-go) and are not restored by a top-up. The official status-code table for the serverless service says "top up and retry", so a reader who follows the text sends the user to the account and the failure stays.
+
+Diagnose first, then advise — four causes need four different answers (free-trial points exhausted / paid plan points exhausted / plan expired / account genuinely in arrears), and only the last one involves topping up. Run `manageEnv(action="usage")` for the environment's credit usage for the current cycle and read the account balance alongside it (`callCloudApi`, `billing`), both read-only; the decision table, per-plan remedies and the console entries are in [credits-exhaustion](../cloud-api-operations/references/recipes/credits-exhaustion.md). Two facts to carry into any advice: a free trial cannot buy resource packs or enable pay-as-you-go (upgrading to a paid plan is the only path), and the plan names are exactly 免费体验版 / 个人版 / 标准版 / 企业版 / 企业高级版.
+
 ### Recording Operation Results
 
 When a task explicitly requires recording operation steps or results to a file (e.g., `RESULT.json`): perform the tool calls first, then write a complete record containing every attempt (action, success/failure, message) plus a `summary` with total / succeeded / failed counts. Do not write the file from memory before the calls finish.
@@ -227,6 +231,7 @@ When a task explicitly requires recording operation steps or results to a file (
    ```
    manageEnv(action="listPackages")
    ```
+   - ⚠️ That list is filtered to the packages the console offers in its **new-purchase / new-environment** menus: `baas_personal` (个人版), `baas_pf_standard` (标准版), `baas_pf_enterprise` (企业版), `baas_pf_enterprise_senior` (企业高级版), `baas_trial` (体验版), `baas_integration` (集成版). Package *families* (`default` / `basic` / `trial` / `vip`) do **not** map onto that set — legacy packages such as `starter` (入门版), `baas_team` (团队版) and `enterprise_basic` (企业基础版) share families with the current ones and are deliberately excluded. The platform still accepts other valid `packageId`s, so the actual create result is authoritative.
 
    **Changing plan (use a `packageId` from `listPackages`):**
    ```

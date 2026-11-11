@@ -7,7 +7,7 @@ import Avatar from '@/components/Avatar';
 import { toast } from '@/utils/toast';
 import { CARD_TEMPLATES, ALL_PRESET_FIELDS, PRESET_FIELD_KEYS, getCardTemplate } from '@/mock/presets';
 import { uploadFile } from '@/services/cloud';
-import { GRAPH_TYPE_LABELS, DEFAULT_MY_CARD_NAME, type CardField, type CardTemplate } from '@/types';
+import { GRAPH_TYPE_LABELS, DEFAULT_MY_CARD_NAME, MAX_CARD_PHOTOS, type CardField, type CardTemplate } from '@/types';
 import styles from './index.module.scss';
 
 /** 名片详情：直接编辑 + 风格切换 + 图谱称谓 + 分享 */
@@ -70,7 +70,10 @@ const CardDetailPage: React.FC = () => {
           setLoadState('ok');
         }
         store.markCardSeen(local.id); // 点开详情即视为已读，清列表「有更新」红点
-        store.refreshSharedCard(local.id).catch(err => console.error('[CardDetail] 活名片刷新失败:', err));
+        store
+          .refreshSharedCard(local.id, { swap: true })
+          .then(() => store.markCardSeen(local.id)) // 拉到的新内容此刻正显示着，同样算已读
+          .catch(err => console.error('[CardDetail] 活名片刷新失败:', err));
         return;
       }
       setLoadState('loading');
@@ -235,7 +238,7 @@ const CardDetailPage: React.FC = () => {
 
   const addPhotos = () => {
     Taro.chooseMedia({
-      count: 9,
+      count: MAX_CARD_PHOTOS - card.photos.length,
       mediaType: ['image'],
       sizeType: ['compressed'],
       success: async res => {
@@ -245,7 +248,9 @@ const CardDetailPage: React.FC = () => {
               uploadFile(`photos/${card.id}-${Date.now().toString(36)}-${i}.png`, f.tempFilePath)
             )
           );
-          if (fileIDs.length) store.updateCard(card.id, { photos: [...card.photos, ...fileIDs] });
+          // 上传期间照片可能被删过，取最新的列表
+          const current = store.getCard(card.id)?.photos ?? [];
+          if (fileIDs.length) store.updateCard(card.id, { photos: [...current, ...fileIDs] });
         } catch (err) {
           console.error('[CardDetail] 照片上传失败:', err);
           toast.error('照片上传失败');
@@ -490,7 +495,7 @@ const CardDetailPage: React.FC = () => {
               ) : null}
             </View>
           ))}
-          {!readonly ? (
+          {!readonly && card.photos.length < MAX_CARD_PHOTOS ? (
             <View className={styles.photoAdd} onClick={addPhotos}>
               <Text className={styles.photoAddText}>＋</Text>
             </View>

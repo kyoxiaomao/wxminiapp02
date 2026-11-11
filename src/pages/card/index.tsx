@@ -7,7 +7,6 @@ import { useStoreVersion } from '@/store/useStoreVersion';
 import { store } from '@/store';
 import { tutorialController, useTutorial, TUTORIAL_STEPS } from '@/tutorial/controller';
 import TutorialOverlay, { type TutorialHole } from '@/components/TutorialOverlay';
-import { dbg } from '@/utils/graphDebug';
 import { getCardTemplate } from '@/mock/presets';
 import SearchBar from '@/components/SearchBar';
 import Empty from '@/components/Empty';
@@ -146,7 +145,7 @@ const SwipeCardItem: React.FC<SwipeCardProps> = ({
         {/* 新人指引示例名片角标 */}
         {store.isTutorialCard(card.id) ? <Text className={styles.sampleTag}>示例</Text> : null}
         {/* 活名片有更新且未点开：名片条右上角红点（微信未读红点风格） */}
-        {card.source === 'shared' && (card.updatedVersion ?? 0) > (card.seenVersion ?? -1) ? (
+        {card.source === 'shared' && (card.updatedVersion ?? 0) !== (card.seenVersion ?? -1) ? (
           <View className={styles.dot} />
         ) : null}
         {linkMode ? (
@@ -200,14 +199,13 @@ const CardPage: React.FC = () => {
     // 页面一显示就先出遮罩+气泡（hole=null 为全屏），量到坐标后再挖孔，
     // 避免切页后出现「引导消失再出现」的空白闪烁
     setTutMaskHidden(false);
-    dbg('tutCardMeasureStart', { linkNodeId, showTick });
     let cancelled = false;
     let tries = 0;
     const measure = () => {
       if (cancelled) return;
       Taro.createSelectorQuery()
         .select('#tutLink-0')
-        .boundingClientRect(rect => {
+        .boundingClientRect((rect: any) => {
           if (cancelled) return;
           if (rect && rect.width > 0) {
             const pad = 10;
@@ -217,7 +215,6 @@ const CardPage: React.FC = () => {
               w: rect.width + pad * 2,
               h: rect.height + pad * 2
             };
-            dbg('tutCardHole', hole);
             setTutHole(hole);
             return;
           }
@@ -228,7 +225,6 @@ const CardPage: React.FC = () => {
           } else {
             setTutHole(null);
             setTutMaskHidden(true);
-            dbg('tutCardHoleFail', { tries });
             console.warn('[Tutorial] 名片页关联按钮坐标获取失败，已撤掉遮罩');
           }
         })
@@ -242,30 +238,20 @@ const CardPage: React.FC = () => {
     };
   }, [tut.active, tut.stepIndex, linkNodeId, showTick, version]);
 
-  // 诊断：记录遮罩/挖孔状态变化（排查切页闪两下）
-  useEffect(() => {
-    if (!store.tutorialActive || tut.stepIndex !== 5) return;
-    dbg('tutCardOverlay', {
-      linkNodeId: !!linkNodeId,
-      hasHole: !!tutHole,
-      hidden: tutMaskHidden
-    });
-  }, [tut.stepIndex, linkNodeId, tutHole, tutMaskHidden]);
-
   useDidShow(() => {
     linkGuardRef.current = false;
     setShowTick(v => v + 1);
     // 清掉上一次访问残留的挖孔/遮罩状态，避免进入步骤时先按旧坐标画一下再跳位（闪）
     setTutHole(null);
     setTutMaskHidden(false);
-    dbg('linkEnter', { nodeId: store.linkPendingNodeId });
     setLinkNodeId(store.linkPendingNodeId || '');
-    // 活名片进列表前批量拉最新：列表名字等显示的是收下时的快照，刷新后与源头同步
+    // 活名片进列表前批量拉最新：列表名字等显示的是收下时的快照，刷新后与源头同步。
+    // 这里不做互换，互换只在打开详情时补跑
     store
       .listCards()
       .filter(c => c.source === 'shared')
       .forEach(c => {
-        store.refreshSharedCard(c.id).catch(err => console.error('[Card] 活名片列表刷新失败:', err));
+        store.refreshSharedCard(c.id, { swap: false }).catch(err => console.error('[Card] 活名片列表刷新失败:', err));
       });
   });
 
@@ -311,7 +297,6 @@ const CardPage: React.FC = () => {
     if (linkGuardRef.current) return; // 防切页动画期间二次点击覆盖关联
     linkGuardRef.current = true;
     const card = store.getCard(cardId);
-    dbg('linkApply', { nodeId: linkNodeId, cardId, cardName: card?.name });
     store.updateNode(linkNodeId, { cardId });
     store.linkPendingNodeId = null;
     setLinkNodeId('');

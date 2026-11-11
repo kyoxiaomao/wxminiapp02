@@ -7,6 +7,15 @@ function uid() {
   return `card-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 只取名片内容字段（刷新对方的引用条时用，不能带上 id、isMe 等身份字段） */
+function pickContent(card) {
+  const out = {};
+  ['name', 'phone', 'company', 'title', 'avatar', 'note', 'template', 'customFields', 'photos'].forEach(key => {
+    if (card[key] !== undefined) out[key] = card[key];
+  });
+  return out;
+}
+
 /** 内容版本号：按名片内容摘要计算，内容变则变（红点「有更新」判定用） */
 function contentVersion(card) {
   const s = JSON.stringify([
@@ -74,7 +83,7 @@ exports.main = async (event) => {
             .get();
           if (dupRes.data[0]) {
             await db.collection('cards').doc(dupRes.data[0]._id).update({
-              data: { ...mineContent, contentVersion: mineVersion }
+              data: { ...pickContent(mine), contentVersion: mineVersion }
             });
             console.info('[getCard] 互换：对方已有引用条，刷新副本:', dupRes.data[0].id);
           } else {

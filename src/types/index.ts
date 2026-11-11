@@ -44,7 +44,7 @@ export interface Card {
   company: string;
   /** 职位 */
   title: string;
-  /** 头像图片地址（mock 阶段用 picsum，后续接云存储） */
+  /** 头像图片地址（云存储 fileID） */
   avatar: string;
   /** 名片上的照片集 */
   photos: string[];
@@ -53,7 +53,7 @@ export interface Card {
   isMe: boolean;
   /** 来源：manual=本人创建/代录，shared=收到的活名片（内容以源卡为准） */
   source?: 'manual' | 'shared';
-  /** 活名片引用的源卡 id（source='shared' 时有值；引用条自身 id 也用源卡 id） */
+  /** 活名片引用的源卡 id（source='shared' 时有值；引用条自身用独立的 id，cards.id 有唯一索引） */
   refCardId?: string;
   /** 是否已公开分享（转发过名片才允许他人经云函数读取） */
   shared?: boolean;
@@ -122,6 +122,9 @@ export type EdgeInput = Omit<Edge, 'id'>;
 
 /** 「我的名片」姓名占位（首登一键授权后未填姓名时使用；显示层视为资料未完善） */
 export const DEFAULT_MY_CARD_NAME = '微信用户';
+
+/** 一张名片最多的照片数 */
+export const MAX_CARD_PHOTOS = 9;
 
 /** 用户资料（首登建名片引导收集，写入 users 集合） */
 export interface UserProfile {

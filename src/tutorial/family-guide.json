@@ -4,8 +4,7 @@
     "title": "新人指引",
     "desc": "用示例数据演示 5 个操作，结束后自动清除。",
     "target": { "kind": "none" },
-    "advance": "manual",
-    "allowPrev": false
+    "advance": "manual"
   },
   {
     "id": "longPress",
@@ -64,7 +63,6 @@
     "title": "完成了",
     "desc": "点完成，清除示例数据。",
     "target": { "kind": "none" },
-    "advance": "manual",
-    "allowPrev": false
+    "advance": "manual"
   }
 ]

@@ -17,7 +17,7 @@ exports.main = async (event) => {
     const res = await cloud.openapi.phonenumber.getPhoneNumber({ code });
     const info = res.phoneInfo || {};
     const phoneNumber = info.purePhoneNumber || info.phoneNumber || '';
-    console.info('[getPhone] 手机号换取成功:', phoneNumber);
+    console.info('[getPhone] 手机号换取成功');
     return {
       code: 0,
       message: 'ok',

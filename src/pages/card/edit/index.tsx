@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Input, Textarea, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { store } from '@/store';
 import Avatar from '@/components/Avatar';
 import { toast } from '@/utils/toast';
-import { CARD_TEMPLATES, ALL_PRESET_FIELDS, PRESET_FIELD_KEYS, getCardTemplate } from '@/mock/presets';
+import { CARD_TEMPLATES, ALL_PRESET_FIELDS, getCardTemplate } from '@/mock/presets';
 import { uploadFile } from '@/services/cloud';
-import type { CardField, CardInput, CardTemplate } from '@/types';
+import { MAX_CARD_PHOTOS, type CardField, type CardInput, type CardTemplate } from '@/types';
 import styles from './index.module.scss';
 
 interface FormState {
@@ -38,49 +38,16 @@ const emptyForm: FormState = {
   note: ''
 };
 
-/** 名片编辑页：新建（无 id）与编辑（带 id）双模式复用；布局与详情页一致，数据保存时才入库 */
+/** 新建名片页：布局与详情页一致，数据保存时才入库（编辑已有名片在详情页直接改） */
 const CardEditPage: React.FC = () => {
-  const instance = Taro.getCurrentInstance();
-  const cardId = instance?.router?.params?.id ?? '';
-  const isEdit = !!cardId;
-
   // 模板下拉菜单 / 自定义字段添加行的临时状态
   const [tplOpen, setTplOpen] = useState(false);
   const [addingField, setAddingField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState('');
 
-  const [form, setForm] = useState<FormState>(() => {
-    if (!cardId) return emptyForm;
-    const card = store.getCard(cardId);
-    if (!card) return emptyForm;
-    // 回填模板预置字段已有值 + 用户自建字段
-    const extra: Record<string, string> = {};
-    const userFields: CardField[] = [];
-    (card.customFields ?? []).forEach(f => {
-      if (PRESET_FIELD_KEYS.has(f.key)) extra[f.key] = f.value;
-      else userFields.push({ ...f });
-    });
-    return {
-      template: card.template,
-      name: card.name,
-      phone: card.phone,
-      company: card.company,
-      title: card.title,
-      extra,
-      userFields,
-      avatar: card.avatar,
-      photos: [...card.photos],
-      note: card.note
-    };
-  });
-
-  useEffect(() => {
-    Taro.setNavigationBarTitle({ title: isEdit ? '编辑名片' : '新建名片' });
-    if (cardId && !store.getCard(cardId)) {
-      toast.error('名片不存在');
-      setTimeout(() => Taro.navigateBack(), 300);
-    }
-  }, [cardId, isEdit]);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  // 保存中：等云端落库期间忽略再次点击，避免建出两张一样的名片
+  const savingRef = useRef(false);
 
   const curTpl = getCardTemplate(form.template);
 
@@ -117,7 +84,7 @@ const CardEditPage: React.FC = () => {
         const file = res.tempFiles[0];
         if (!file) return;
         try {
-          const fileID = await uploadFile(`avatars/${cardId || 'new'}-${Date.now().toString(36)}.png`, file.tempFilePath);
+          const fileID = await uploadFile(`avatars/new-${Date.now().toString(36)}.png`, file.tempFilePath);
           patch({ avatar: fileID });
         } catch (err) {
           console.error('[CardEdit] 头像上传失败：', err);
@@ -130,7 +97,7 @@ const CardEditPage: React.FC = () => {
 
   const choosePhotos = () => {
     Taro.chooseMedia({
-      count: Math.max(1, 9 - form.photos.length),
+      count: Math.max(1, MAX_CARD_PHOTOS - form.photos.length),
       mediaType: ['image'],
       sizeType: ['compressed'],
       success: async res => {
@@ -138,7 +105,7 @@ const CardEditPage: React.FC = () => {
         try {
           const fileIDs = await Promise.all(
             res.tempFiles.map((f, i) =>
-              uploadFile(`photos/${cardId || 'new'}-${Date.now().toString(36)}-${i}.png`, f.tempFilePath)
+              uploadFile(`photos/new-${Date.now().toString(36)}-${i}.png`, f.tempFilePath)
             )
           );
           patch({ photos: [...form.photos, ...fileIDs] });
@@ -160,16 +127,14 @@ const CardEditPage: React.FC = () => {
       toast.info('请填写姓名');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     // 全字段保存：预置字段全集（去掉称谓——称谓归图谱节点）+ 用户自建字段
-    const oldFields = (isEdit ? store.getCard(cardId)?.customFields : undefined) ?? [];
-    const merged: CardField[] = ALL_PRESET_FIELDS.filter(d => d.key !== 'role').map(d => ({
+    const presetFields: CardField[] = ALL_PRESET_FIELDS.filter(d => d.key !== 'role').map(d => ({
       ...d,
-      value: form.extra[d.key] ?? oldFields.find(f => f.key === d.key)?.value ?? ''
+      value: form.extra[d.key] ?? ''
     }));
-    // 旧版称谓 role 原样保留（数据不删，编辑入口已归图谱节点）；非预置字段由 userFields 携带
-    const preserved = oldFields.filter(f => f.key === 'role');
-    const userFields = form.userFields.filter(f => !PRESET_FIELD_KEYS.has(f.key));
-    const customFields: CardField[] = [...merged, ...preserved, ...userFields];
+    const customFields: CardField[] = [...presetFields, ...form.userFields];
     const payload: CardInput = {
       name: form.name.trim(),
       template: form.template,
@@ -180,40 +145,20 @@ const CardEditPage: React.FC = () => {
       avatar: form.avatar,
       photos: form.photos,
       note: form.note.trim(),
-      isMe: isEdit ? store.getCard(cardId)?.isMe ?? false : false,
-      createdAt: isEdit ? store.getCard(cardId)?.createdAt ?? '' : new Date().toISOString()
+      isMe: false,
+      createdAt: new Date().toISOString()
     };
-    if (isEdit) {
-      store.updateCard(cardId, payload);
-      console.info('[CardEdit] 更新名片：%s', cardId);
+    // 等云端落库成功才算保存成功，失败留在本页暴露问题
+    try {
+      await store.createCard(payload);
+      console.info('[CardEdit] 新建名片：%s', payload.name);
       toast.success('已保存');
       setTimeout(() => Taro.navigateBack(), 300);
-    } else {
-      // 新建：等云端落库成功才算保存成功，失败留在本页暴露问题
-      try {
-        await store.createCard(payload);
-        console.info('[CardEdit] 新建名片：%s', payload.name);
-        toast.success('已保存');
-        setTimeout(() => Taro.navigateBack(), 300);
-      } catch (err) {
-        console.error('[CardEdit] 新建名片失败:', err);
-        Taro.showToast({ title: '保存失败，云端未写入', icon: 'none' });
-      }
+    } catch (err) {
+      savingRef.current = false;
+      console.error('[CardEdit] 新建名片失败:', err);
+      Taro.showToast({ title: '保存失败，云端未写入', icon: 'none' });
     }
-  };
-
-  const handleDelete = () => {
-    Taro.showModal({
-      title: '删除名片',
-      content: `确定删除「${form.name}」吗？图谱中引用 TA 的节点将变为匿名节点。`,
-      confirmColor: '#f53f3f',
-      success: res => {
-        if (!res.confirm) return;
-        store.deleteCard(cardId);
-        toast.success('已删除');
-        setTimeout(() => Taro.navigateBack(), 300);
-      }
-    });
   };
 
   const canSave = form.name.trim().length > 0;
@@ -363,7 +308,7 @@ const CardEditPage: React.FC = () => {
               </View>
             </View>
           ))}
-          {form.photos.length < 9 ? (
+          {form.photos.length < MAX_CARD_PHOTOS ? (
             <View className={styles.photoAdd} onClick={choosePhotos}>
               <Text className={styles.photoAddText}>＋</Text>
             </View>
@@ -390,11 +335,6 @@ const CardEditPage: React.FC = () => {
       </View>
 
       <View className={styles.actionBar}>
-        {isEdit ? (
-          <View className={`${styles.actionBtn} ${styles.deleteBtn}`} onClick={handleDelete}>
-            <Text>删除</Text>
-          </View>
-        ) : null}
         <View
           className={`${styles.actionBtn} ${styles.saveBtn} ${canSave ? '' : styles.saveBtnDisabled}`}
           onClick={canSave ? handleSave : undefined}

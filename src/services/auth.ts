@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { store } from '@/store'
-import { callFunction, dbList, getDatabase, setDemoCloudMode } from './cloud'
+import { callFunction, dbList, getDatabase } from './cloud'
 import { perfMark } from '@/utils/perf'
 import type { UserProfile } from '@/types'
 
@@ -10,19 +10,14 @@ export const CLOUD_ENV_ID = 'mingpiantupu-d1gbmi23j8988d532'
 /** login 云函数返回数据 */
 interface LoginData {
   openid: string
-  appid: string
-  unionid: string
-  claimed: number
   /** 是否已完成首登建名片引导 */
   onboarded: boolean
-  /** 用户资料（引导完成后写入） */
-  profile: UserProfile | null
 }
 
 let loginPromise: Promise<LoginData> | null = null
 
 /**
- * 云开发初始化（应用启动时调用一次）
+ * 云开发初始化（应用启动时调用）
  * - traceUser: true 让 CloudBase 将请求与当前微信用户关联
  */
 export function initCloud(): void {
@@ -33,22 +28,23 @@ export function initCloud(): void {
 /**
  * 获取登录数据（openid / 首登引导状态）
  * - 小程序 CloudBase 天然免登录：openid 由微信在云函数侧自动注入，这里经 login 云函数透出
- * - 结果缓存，整个启动周期只请求一次
+ * - 成功结果缓存；失败清掉缓存，重试时才会重新请求
  * - 出错直接抛出，不做兜底
  */
 function fetchLoginData(): Promise<LoginData> {
   if (!loginPromise) {
-    loginPromise = callFunction<LoginData>('login').then(data => {
-      console.info('[Auth] 微信登录成功，openid: %s，onboarded: %s', data.openid, data.onboarded)
-      return data
-    })
+    loginPromise = callFunction<LoginData>('login').then(
+      data => {
+        console.info('[Auth] 微信登录成功，onboarded: %s', data.onboarded)
+        return data
+      },
+      err => {
+        loginPromise = null
+        throw err
+      }
+    )
   }
   return loginPromise
-}
-
-/** 获取当前用户 openid（账号锚点） */
-export function getOpenId(): Promise<string> {
-  return fetchLoginData().then(data => data.openid)
 }
 
 export interface BootstrapResult {
@@ -65,21 +61,12 @@ interface UserDoc {
 /**
  * 应用启动登录：初始化云 + 拿 openid + 载入云端数据（名片 / 图谱）
  * - 首登（未授权）用户：静默播种「我的名片」+默认图谱+「我」节点，并准备自动进入新人指引
- * - 失败直接抛出暴露问题（不做静默兜底）
+ * - 失败直接抛出，由调用方提示用户重试
  */
 export async function bootstrapAuth(): Promise<BootstrapResult> {
   perfMark('bootstrapAuth 开始')
   initCloud()
   perfMark('Cloud.init 完成')
-  // 演示模式只在「账号密码登录」的当前会话内有效：冷启动一律回到真实账号。
-  // 历史版本会把 demoMode 持久化在本机，账号密码入口关闭后无法再关闭，
-  // 这里进入即清理，避免重启后一直停留在共享演示数据里。
-  if (Taro.getStorageSync('demoMode')) {
-    Taro.removeStorageSync('demoMode')
-    console.info('[Auth] 已清除本机遗留的演示模式标记，本次按真实账号登录')
-  }
-  store.demoMode = false
-  setDemoCloudMode(false)
   // 登录与首屏数据并行：集合读取由客户端 ACL 按当前用户自动限定，不依赖 openid；
   // 账号锚点/首登播种等写操作必须等登录返回后再做
   const loginTask = fetchLoginData().then(data => {
@@ -112,22 +99,15 @@ export async function bootstrapAuth(): Promise<BootstrapResult> {
   return { onboarded: login.onboarded }
 }
 
-/** 标记新人指引已自动播放过（失败只报错，不阻断指引） */
-export async function markTutorialSeen(): Promise<void> {
-  const db = getDatabase()
-  await db
-    .collection('users')
-    .where({ openId: store.userOpenId })
-    .update({ data: { tutorialSeen: true } })
-  console.info('[Auth] 新人指引已标记为看过，下次启动不再自动播放')
+/** 当前用户在 users 集合里的记录（Taro 的类型里 where() 之后没有 update，这里用 any） */
+function myUserDoc(): any {
+  return getDatabase().collection('users').where({ openId: store.userOpenId })
 }
 
-/** 进入/退出演示模式（仅当前会话有效；下次冷启动会回到真实账号） */
-export function setDemoMode(on: boolean): void {
-  store.demoMode = on
-  setDemoCloudMode(on)
-  Taro.setStorageSync('demoMode', on)
-  console.info('[Auth] 演示模式已%s', on ? '开启' : '关闭')
+/** 标记新人指引已自动播放过（失败只报错，不阻断指引） */
+export async function markTutorialSeen(): Promise<void> {
+  await myUserDoc().update({ data: { tutorialSeen: true } })
+  console.info('[Auth] 新人指引已标记为看过，下次启动不再自动播放')
 }
 
 /**
@@ -137,10 +117,6 @@ export function setDemoMode(on: boolean): void {
  * - 写入失败直接抛出（否则下次启动会重复弹引导）
  */
 export async function completeOnboarding(profile: UserProfile): Promise<void> {
-  const db = getDatabase()
-  await db
-    .collection('users')
-    .where({ openId: store.userOpenId })
-    .update({ data: { onboarded: true, profile: db.command.set(profile) } })
+  await myUserDoc().update({ data: { onboarded: true, profile: getDatabase().command.set(profile) } })
   console.info('[Auth] 首登引导完成，资料已写入 users：', profile.name)
 }

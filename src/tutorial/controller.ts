@@ -123,14 +123,6 @@ class TutorialController {
     this.commit();
   }
 
-  prev(): void {
-    if (!this.state.active) return;
-    const step = this.getStep();
-    if (!step?.allowPrev || this.state.stepIndex <= 0) return;
-    this.state = { ...this.state, stepIndex: this.state.stepIndex - 1 };
-    this.commit();
-  }
-
   /**
    * 页面真实操作上报：只有命中当前步骤的 advance 才推进
    * 顺带记录练习节点 / 关系 / 已绑名片，供中断续播重建

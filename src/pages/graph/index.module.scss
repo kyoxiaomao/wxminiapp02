@@ -51,13 +51,6 @@
   text-overflow: ellipsis;
 }
 
-.pillCreate {
-  font-size: 13px;
-  font-weight: 700;
-  color: $color-primary;
-  white-space: nowrap;
-}
-
 .pillArrow {
   font-size: 11px;
   color: $color-text-tertiary;
@@ -269,16 +262,6 @@
   margin-top: 4px;
 }
 
-.tag {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  background: $color-primary;
-}
-
 // 详情卡称谓：可编辑输入（同 tag 药丸外观，点击即改）
 // 宽度由 TSX 按字数动态计算（原生 Input 无法用 CSS width:auto 缩到内容宽）
 // 垂直居中：原生 Input 内文字不随竖向 padding 居中，必须固定 height + line-height
@@ -353,28 +336,6 @@
 .noCardText {
   font-size: 13px;
   color: $color-text-tertiary;
-}
-
-// 关联名片主按钮
-.linkCardBtn {
-  margin-top: 12px;
-  padding: 0 28px;
-  height: 34px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: $color-primary;
-
-  &:active {
-    opacity: 0.9;
-  }
-}
-
-.linkCardText {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
 }
 
 // ---------- 新建图谱悬浮面板（画布保持可见，紫底半透明遮罩，面板垂直居中） ----------
@@ -582,130 +543,6 @@
 
 .placeholder {
   color: $color-text-disabled;
-}
-
-// ---------- 添加成员（底部文档流） ----------
-.picker {
-  flex: 0 0 auto;
-  background: #ffffff;
-  border-radius: 20px 20px 0 0;
-  padding: 14px 20px calc(env(safe-area-inset-bottom) + 12px);
-  box-shadow: 0 -8px 30px rgba(60, 35, 75, 0.25);
-  height: 54vh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  z-index: 9;
-}
-
-.pickerHead {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.pickerTitle {
-  font-size: 16px;
-  font-weight: 700;
-  color: $color-text-primary;
-}
-
-.pickerClose {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: $color-bg-hover;
-
-  &:active {
-    opacity: 0.8;
-  }
-}
-
-.pickerCloseText {
-  font-size: 14px;
-  color: $color-text-secondary;
-}
-
-.pickerList {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.pickerItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid $color-divider;
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &:active {
-    background: $color-bg-hover;
-  }
-}
-
-.pickerAvatar {
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 700;
-  color: #ffffff;
-  background: $color-primary-light;
-}
-
-.pickerInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.pickerName {
-  display: block;
-  font-size: 15px;
-  font-weight: 600;
-  color: $color-text-primary;
-  @include text-ellipsis;
-}
-
-.pickerMeta {
-  display: block;
-  font-size: 12px;
-  color: $color-text-secondary;
-  margin-top: 2px;
-  @include text-ellipsis;
-}
-
-.pickerAdd {
-  font-size: 13px;
-  font-weight: 600;
-  color: $color-primary;
-  background: $color-tag-bg;
-  border-radius: 999px;
-  padding: 6px 14px;
-  white-space: nowrap;
-}
-
-.pickerEmpty {
-  padding: 40rpx 0;
-  display: flex;
-  justify-content: center;
-}
-
-.pickerEmptyText {
-  font-size: 13px;
-  color: $color-text-tertiary;
 }
 
 // ---------- 新人指引：问号入口 + 首次提示 ----------

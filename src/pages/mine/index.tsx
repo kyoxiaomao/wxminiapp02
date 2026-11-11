@@ -90,7 +90,7 @@ const MinePage: React.FC = () => {
         </View>
       </View>
 
-      <View className={styles.body}>
+      <View>
         {/* 高级会员渐变横幅 */}
         <View className={styles.memberBanner} onClick={() => comingSoon('高级会员')}>
           <View className={styles.memberHead}>

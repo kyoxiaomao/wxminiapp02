@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '编辑名片'
+  navigationBarTitleText: '新建名片'
 })

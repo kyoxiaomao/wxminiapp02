@@ -1,47 +1,4 @@
-import type { CardTemplate, GraphType, RelationType } from '@/types';
-
-/** 图谱类型预设：创建图谱时按类型预置关系标签与默认布局 */
-export interface GraphPreset {
-  /** 预置关系标签（S4 关系编辑时可选） */
-  relations: string[];
-  /** 默认布局：family 用分层树，其余用力导向网络 */
-  layout: 'tree' | 'force';
-  /** 默认关系类型 */
-  defaultRelation: RelationType;
-}
-
-export const GRAPH_PRESETS: Record<GraphType, GraphPreset> = {
-  family: {
-    relations: ['夫妻', '父子', '母子', '父女', '母女', '兄弟', '姐妹', '兄妹', '姐弟'],
-    layout: 'tree',
-    defaultRelation: 'parent'
-  },
-  company: {
-    relations: ['上级', '下级', '同事', '合伙人', '客户对接'],
-    layout: 'force',
-    defaultRelation: 'colleague'
-  },
-  customer: {
-    relations: ['负责人', '对接人', '合作伙伴', '转介绍'],
-    layout: 'force',
-    defaultRelation: 'colleague'
-  },
-  cars: {
-    relations: ['车友', '会长', '队友', '同行'],
-    layout: 'force',
-    defaultRelation: 'friend'
-  },
-  fish: {
-    relations: ['钓友', '领队', '同伴', '渔具店老板'],
-    layout: 'force',
-    defaultRelation: 'friend'
-  },
-  custom: {
-    relations: ['相识', '好友', '同学', '邻居'],
-    layout: 'force',
-    defaultRelation: 'custom'
-  }
-};
+import type { CardTemplate } from '@/types';
 
 /** 预置字段定义 */
 export interface TemplateFieldDef {

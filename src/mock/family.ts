@@ -13,7 +13,6 @@ interface MemberDef {
   role: string;
   /** 代际：1 族长辈 / 2 子女辈 / 3 孙辈 */
   gen: 1 | 2 | 3;
-  gender: 'm' | 'f';
   company: string;
   title: string;
   phone: string;
@@ -21,21 +20,21 @@ interface MemberDef {
 }
 
 const MEMBERS: MemberDef[] = [
-  { code: 'p1', name: '陈鸿儒', role: '爷爷', gen: 1, gender: 'm', company: '原市教育局', title: '退休教师', phone: '138 0571 0001', note: '爷爷，每年清明主持祭祖，书法爱好者。' },
-  { code: 'p2', name: '林淑芬', role: '奶奶', gen: 1, gender: 'f', company: '原市纺织厂', title: '退休职工', phone: '138 0571 0002', note: '奶奶，做得一手好菜，家庭聚会的固定主厨。' },
+  { code: 'p1', name: '陈鸿儒', role: '爷爷', gen: 1, company: '原市教育局', title: '退休教师', phone: '138 0571 0001', note: '爷爷，每年清明主持祭祖，书法爱好者。' },
+  { code: 'p2', name: '林淑芬', role: '奶奶', gen: 1, company: '原市纺织厂', title: '退休职工', phone: '138 0571 0002', note: '奶奶，做得一手好菜，家庭聚会的固定主厨。' },
 
-  { code: 'c1', name: '陈志远', role: '爸爸', gen: 2, gender: 'm', company: '远航科技', title: '工程师', phone: '138 0571 1001', note: '爸爸，定居杭州，在远航科技做工程师。' },
-  { code: 's1', name: '苏婉清', role: '妈妈', gen: 2, gender: 'f', company: '自由职业', title: '平面设计师', phone: '138 0571 1002', note: '妈妈，在杭州经营自己的设计工作室。' },
-  { code: 'c2', name: '陈志玲', role: '姑姑', gen: 2, gender: 'f', company: '市人民医院', title: '会计', phone: '138 0571 1003', note: '姑姑，留在本地照顾爷爷奶奶。' },
-  { code: 's2', name: '周建国', role: '姑父', gen: 2, gender: 'm', company: '远航科技', title: '销售经理', phone: '138 0571 1004', note: '姑父，商务部销售经理，家族聚会气氛担当。' },
-  { code: 'c3', name: '陈志明', role: '舅舅', gen: 2, gender: 'm', company: '市第一医院', title: '外科医生', phone: '138 0571 1005', note: '舅舅，定居南京，家族健康顾问。' },
-  { code: 's3', name: '吴雅琴', role: '舅妈', gen: 2, gender: 'f', company: '南京外国语学校', title: '教师', phone: '138 0571 1006', note: '舅妈，教高中语文。' },
+  { code: 'c1', name: '陈志远', role: '爸爸', gen: 2, company: '远航科技', title: '工程师', phone: '138 0571 1001', note: '爸爸，定居杭州，在远航科技做工程师。' },
+  { code: 's1', name: '苏婉清', role: '妈妈', gen: 2, company: '自由职业', title: '平面设计师', phone: '138 0571 1002', note: '妈妈，在杭州经营自己的设计工作室。' },
+  { code: 'c2', name: '陈志玲', role: '姑姑', gen: 2, company: '市人民医院', title: '会计', phone: '138 0571 1003', note: '姑姑，留在本地照顾爷爷奶奶。' },
+  { code: 's2', name: '周建国', role: '姑父', gen: 2, company: '远航科技', title: '销售经理', phone: '138 0571 1004', note: '姑父，商务部销售经理，家族聚会气氛担当。' },
+  { code: 'c3', name: '陈志明', role: '舅舅', gen: 2, company: '市第一医院', title: '外科医生', phone: '138 0571 1005', note: '舅舅，定居南京，家族健康顾问。' },
+  { code: 's3', name: '吴雅琴', role: '舅妈', gen: 2, company: '南京外国语学校', title: '教师', phone: '138 0571 1006', note: '舅妈，教高中语文。' },
 
-  { code: 'g1', name: '陈嘉禾', role: '我', gen: 3, gender: 'm', company: '浙江大学', title: '计算机系本科生', phone: '138 0571 2001', note: '我，计算机系大二，小程序的实际使用者。' },
-  { code: 'g2', name: '陈嘉悦', role: '姐姐', gen: 3, gender: 'f', company: '杭州第二中学', title: '高中生', phone: '138 0571 2002', note: '姐姐，高二，舞蹈特长。' },
-  { code: 'g3', name: '林思远', role: '表哥', gen: 3, gender: 'm', company: '南师大附中', title: '初中生', phone: '138 0571 2003', note: '表哥，随姑父姓林，篮球打得好。' },
-  { code: 'g4', name: '陈嘉言', role: '弟弟', gen: 3, gender: 'm', company: '南京芳草园小学', title: '小学生', phone: '138 0571 2004', note: '弟弟，小学四年级，奥数苗子。' },
-  { code: 'g5', name: '陈嘉宁', role: '妹妹', gen: 3, gender: 'f', company: '南京芳草园小学', title: '小学生', phone: '138 0571 2005', note: '妹妹，小学二年级，喜欢画画。' }
+  { code: 'g1', name: '陈嘉禾', role: '我', gen: 3, company: '浙江大学', title: '计算机系本科生', phone: '138 0571 2001', note: '我，计算机系大二，小程序的实际使用者。' },
+  { code: 'g2', name: '陈嘉悦', role: '姐姐', gen: 3, company: '杭州第二中学', title: '高中生', phone: '138 0571 2002', note: '姐姐，高二，舞蹈特长。' },
+  { code: 'g3', name: '林思远', role: '表哥', gen: 3, company: '南师大附中', title: '初中生', phone: '138 0571 2003', note: '表哥，随姑父姓林，篮球打得好。' },
+  { code: 'g4', name: '陈嘉言', role: '弟弟', gen: 3, company: '南京芳草园小学', title: '小学生', phone: '138 0571 2004', note: '弟弟，小学四年级，奥数苗子。' },
+  { code: 'g5', name: '陈嘉宁', role: '妹妹', gen: 3, company: '南京芳草园小学', title: '小学生', phone: '138 0571 2005', note: '妹妹，小学二年级，喜欢画画。' }
 ];
 
 /** 头像用云存储 fileID（avatars/seed/，AI 生成人像，与 seed 云函数同一份映射；一张卡一个，全局不重复） */

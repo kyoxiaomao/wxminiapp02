@@ -96,23 +96,6 @@
   border-bottom: 2rpx solid $color-border;
 }
 
-.graphTags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: $spacing-xs;
-  margin-top: 8rpx;
-}
-
-.graphTag {
-  padding: 4rpx 16rpx;
-  border-radius: $radius-round;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-semibold;
-  color: $color-primary;
-  background: $color-tag-bg;
-}
-
 // 无图谱时的「一键添加到图谱」占位药丸
 .graphAdd {
   display: inline-flex;

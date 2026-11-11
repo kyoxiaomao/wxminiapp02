@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Button } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { store } from '@/store';
-import { completeOnboarding, setDemoMode } from '@/services/auth';
+import { completeOnboarding } from '@/services/auth';
 import { callFunction } from '@/services/cloud';
 import { toast } from '@/utils/toast';
 import type { CardInput, UserProfile } from '@/types';
@@ -20,18 +20,8 @@ interface GetPhoneNumberEvent {
  */
 const OnboardingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  // 账号密码登录（平台审核用）：常显输入框
-  const [account, setAccount] = useState('');
-  const [password, setPassword] = useState('');
-  const [accountLoading, setAccountLoading] = useState(false);
 
   const myCard = store.getMyCard();
-
-  const goGraph = () => {
-    Taro.switchTab({ url: '/pages/graph/index' }).catch(err =>
-      console.error('[Onboarding] 返回图谱页失败:', err)
-    );
-  };
 
   /** 授权完成 / 先完善资料：进入「我的名片」详情（姓名输入自动聚焦） */
   const goMyCardDetail = (cardId?: string) => {
@@ -43,35 +33,6 @@ const OnboardingPage: React.FC = () => {
     Taro.redirectTo({ url: `/pages/card/detail/index?id=${id}&focusName=1` }).catch(err =>
       console.error('[Onboarding] 打开名片详情失败:', err)
     );
-  };
-
-  /** 账号密码登录（平台审核用）：验证通过后服务端把演示账号数据复制到本人名下 */
-  const handleAccountLogin = async () => {
-    const acc = account.trim();
-    const pwd = password;
-    if (!acc || !pwd) {
-      toast.info('请输入账号和密码');
-      return;
-    }
-    if (accountLoading) return;
-    setAccountLoading(true);
-    toast.loading('登录中…');
-    try {
-      await callFunction('accountLogin', { account: acc, password: pwd });
-      // 进入演示模式：读写共享 demo_* 集合（一份演示数据所有测试账号共用）并本地记住
-      setDemoMode(true);
-      await store.loadCardsFromCloud();
-      await store.loadGraphsFromCloud();
-      toast.hideLoading();
-      toast.success('登录成功，已载入演示数据');
-      setTimeout(goGraph, 300);
-    } catch (err) {
-      console.error('[Onboarding] 账号密码登录失败:', err);
-      toast.hideLoading();
-      Taro.showToast({ title: String((err as Error)?.message ?? '登录失败'), icon: 'none' });
-    } finally {
-      setAccountLoading(false);
-    }
   };
 
   /** 创建我的名片：建/更新 isMe 卡 → 播种默认图谱 → 写 users（onboarded=true） */
@@ -158,8 +119,6 @@ const OnboardingPage: React.FC = () => {
         <View className={styles.handle} />
         <Text className={styles.title}>名片图谱</Text>
         <View className={styles.titleBar} />
-
-        {/* 账号密码登录表单已按需求隐藏（云函数入口保留，需要平台审核时可临时打开） */}
 
         <Button
           className={`${styles.authBtn} ${loading ? styles.authBtnDisabled : ''}`}

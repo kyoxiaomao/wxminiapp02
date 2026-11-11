@@ -6,13 +6,10 @@ import { useStoreVersion } from '@/store/useStoreVersion';
 import { store } from '@/store';
 import { tutorialController, useTutorial, TUTORIAL_STEPS } from '@/tutorial/controller';
 import TutorialOverlay, { type TutorialHole } from '@/components/TutorialOverlay';
-import { GRAPH_PRESETS } from '@/mock/presets';
 import { uploadFile } from '@/services/cloud';
 import { markTutorialSeen } from '@/services/auth';
 import { GRAPH_TYPE_LABELS, DEFAULT_MY_CARD_NAME, type GraphType, type RelationType, type GraphNode, type Card } from '@/types';
 import { ForceGraph, type ForceLink, type ForceNode } from '@/utils/forceGraph';
-import { inferGender } from '@/utils/avatarPainter';
-import { dbg } from '@/utils/graphDebug';
 import { perfMark } from '@/utils/perf';
 import Avatar from '@/components/Avatar';
 import styles from './index.module.scss';
@@ -86,11 +83,6 @@ interface TouchPoint {
   sy: number;
 }
 
-interface LinkMode {
-  step: 1 | 2;
-  first: string;
-}
-
 /** 亲子类关系标签 → parent 边类型 */
 const PARENT_LABELS = ['父子', '母子', '父女', '母女', '兄弟', '姐妹', '兄妹', '姐弟', '儿子', '女儿'];
 const COLLEAGUE_LABELS = ['上级', '下级', '同事', '合伙人', '客户对接', '负责人', '对接人', '合作伙伴', '转介绍'];
@@ -112,7 +104,7 @@ function tagInputWidth(text: string): string {
   return `${Math.ceil(w) + 20}px`;
 }
 
-/** 双端兼容取 Canvas 节点（微信走 selectorQuery node，H5 回退 DOM） */
+/** 取 Canvas 节点（selectorQuery node） */
 function resolveCanvas(selector: string): Promise<{ canvas: any; width: number; height: number } | null> {
   return new Promise(resolve => {
     const query = Taro.createSelectorQuery();
@@ -124,12 +116,6 @@ function resolveCanvas(selector: string): Promise<{ canvas: any; width: number; 
           width: Number(r.width) || 300,
           height: Number(r.height) || 300
         });
-        return;
-      }
-      if (process.env.TARO_ENV === 'h5') {
-        const dom = document.getElementById(selector.replace(/^#/, '')) as HTMLCanvasElement | null;
-        if (dom) resolve({ canvas: dom, width: dom.clientWidth || 300, height: dom.clientHeight || 300 });
-        else resolve(null);
         return;
       }
       resolve(null);
@@ -186,7 +172,6 @@ const GraphPage: React.FC = () => {
 
   // ---------- React 状态（低频 UI） ----------
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [, setLinkMode] = useState<LinkMode | null>(null);
   const [graphMenuOpen, setGraphMenuOpen] = useState(false);
   // 新建图谱面板：头像 / 名称 / 类型 一体化编辑
   const [createOpen, setCreateOpen] = useState(false);
@@ -214,7 +199,6 @@ const GraphPage: React.FC = () => {
   const envRef = useRef<CanvasEnv | null>(null);
   const rafRef = useRef<{ id: number; cancel: (id: number) => void } | null>(null);
   const viewRef = useRef({ k: 0.62, center: { x: 0, y: 0 } });
-  const framesRef = useRef(0);
   const touchesRef = useRef(new Map<number, TouchPoint>());
   const dragNodeRef = useRef<ForceNode | null>(null);
   const pinchRef = useRef<PinchState | null>(null);
@@ -222,7 +206,6 @@ const GraphPage: React.FC = () => {
   const movedRef = useRef(false);
   const downNodeIdRef = useRef<string | null>(null);
   const selectedRef = useRef<string | null>(null);
-  const linkModeRef = useRef<LinkMode | null>(null);
   // 长按节点操作（＋ 添加 / － 删除）
   const actionTargetRef = useRef<string | null>(null);
   const actionBornRef = useRef(0);
@@ -271,10 +254,9 @@ const GraphPage: React.FC = () => {
       if (img) {
         avatarImgsRef.current.set(src, img);
         dirtyRef.current = true; // 空闲停绘期间头像到位，置脏补一帧
-        dbg('avatarOk', { src });
       } else {
         avatarFailedRef.current.add(src);
-        dbg('avatarLoadFail', { src });
+        console.error('[GraphCanvas] 头像加载失败:', src);
       }
     };
     void (async () => {
@@ -285,15 +267,10 @@ const GraphPage: React.FC = () => {
       }
       try {
         const canvas = envRef.current?.canvas;
-        if (process.env.TARO_ENV !== 'h5' && canvas?.createImage) {
+        if (canvas?.createImage) {
           // 微信 canvas 2d：createImage 返回的 Image 带 width/height
           const im = canvas.createImage();
           im.onload = () => finish(im as unknown as HTMLImageElement);
-          im.onerror = () => finish(null);
-          im.src = url;
-        } else if (typeof document !== 'undefined') {
-          const im = new Image();
-          im.onload = () => finish(im);
           im.onerror = () => finish(null);
           im.src = url;
         } else {
@@ -346,7 +323,6 @@ const GraphPage: React.FC = () => {
           name: nameText(card),
           role: n.role,
           gen: n.gen,
-          gender: inferGender(n.role, n.id),
           hasAvatar: !!card?.avatar,
           avatar: card?.avatar || '',
           // 资料未完善：我的节点且没有姓名、也没有头像时，圈内名字下方红字提示
@@ -473,7 +449,9 @@ const GraphPage: React.FC = () => {
 
   /** 编辑关系：修改标签（长按生成的边默认「关系」，点击标签改写） */
   const editEdge = (link: ForceLink) => {
-    void Taro.showModal({ title: '修改关系', editable: true, placeholderText: link.label }).then(m => {
+    // editable / placeholderText / content 是微信基础库能力，Taro 的类型里没有
+    void Taro.showModal({ title: '修改关系', editable: true, placeholderText: link.label } as Taro.showModal.Option).then(res => {
+      const m = res as Taro.showModal.SuccessCallbackResult & { content?: string };
       if (!m.confirm) return;
       const text = (m.content || '').trim();
       if (text && text !== link.label) {
@@ -613,7 +591,6 @@ const GraphPage: React.FC = () => {
       if (!env) return;
       const res = await resolveCanvas('#graphCanvas');
       if (!res || res.width < 10 || res.height < 10) {
-        dbg('resizeSkip', { w: res?.width ?? null, h: res?.height ?? null });
         // 页面隐藏/过渡中查询失败：退避重试（上限 3 次），回可见后必然拿到真实尺寸
         if (resizeRetryCountRef.current < 3) {
           resizeRetryCountRef.current += 1;
@@ -637,7 +614,6 @@ const GraphPage: React.FC = () => {
       env.top = rect.top;
       dirtyRef.current = true; // 改位图尺寸会清空画布，必须置脏补一帧
       setTutTick(v => v + 1); // 画布尺寸/偏移变了，遮罩挖孔重算
-      dbg('resize', { w: res.width, h: res.height, left: rect.left, top: rect.top });
     })();
   };
 
@@ -890,12 +866,10 @@ const GraphPage: React.FC = () => {
         if (dirtyRef.current) {
           draw();
           dirtyRef.current = false;
-          framesRef.current++;
-          if (framesRef.current % 300 === 0) dbg('tick', { frames: framesRef.current }); // 心跳：日志停更=循环死亡
         }
         if (rafRef.current) rafRef.current.id = canvas.requestAnimationFrame(step);
       } catch (err) {
-        dbg('loopCrash', { msg: String(err) });
+        console.error('[GraphCanvas] 渲染循环异常:', err);
       }
     };
     rafRef.current = {
@@ -909,24 +883,18 @@ const GraphPage: React.FC = () => {
 
   const selectNode = (id: string) => {
     const node = store.getNode(id);
-    if (!node) {
-      dbg('selectFail', { id, reason: 'nodeMissing' });
-      return;
-    }
+    if (!node) return;
     // 资料未完善：单击我的节点先补资料
     if (isNodeIncomplete(node) && node.cardId) {
       const myCard = store.getCard(node.cardId);
       // 首登流程且还没有手机号 → 先打开一键授权页；拒绝授权也可从该页「先完善资料」去详情
       if (store.firstLoginFlow && !myCard?.phone) {
-        dbg('selectAuth', { id, cardId: node.cardId });
         Taro.navigateTo({ url: '/pages/onboarding/index' });
         return;
       }
-      dbg('selectIncomplete', { id, cardId: node.cardId });
       Taro.navigateTo({ url: `/pages/card/detail/index?id=${node.cardId}&focusName=1` });
       return;
     }
-    dbg('select', { id, name: nameOfNode(node) });
     selectedRef.current = id;
     setSelectedId(id);
     dirtyRef.current = true; // 高亮/非邻接淡出立即重绘
@@ -942,62 +910,37 @@ const GraphPage: React.FC = () => {
     }
   };
 
-  // ---------- 连线模式 ----------
-  const exitLinkMode = () => {
-    linkModeRef.current = null;
-    setLinkMode(null);
-  };
-
   // ---------- 触摸手势（touches 数组自管理，替代 pointerId Map） ----------
   const handleTouchStart = (e: { touches: Array<{ identifier: number; clientX: number; clientY: number }> }) => {
-    dbg('touchStart', { x: e.touches[0]?.clientX, y: e.touches[0]?.clientY, n: e.touches.length });
     // 僵尸触点清理：上次 touchEnd 丢失（如切页动画期间）会在 map 里留下残留 id，
     // 后续每次 tap 都会因 size===2 被误判成双指捏合（movedRef=true）→ 节点永远选不中。
     // 因此每次 touchStart 先丢弃不在本次 touches 里的旧点，并对复用 id 的点刷新起点坐标。
     const liveIds = new Set(e.touches.map(t => t.identifier));
     Array.from(touchesRef.current.keys()).forEach(id => {
       if (!liveIds.has(id)) {
-        dbg('pruneStaleTouch', { id });
         touchesRef.current.delete(id);
       }
     });
     if (!envRef.current) {
-      dbg('touchStartSkip', { reason: 'noEnv' });
       return;
     }
     // 点画布先收起下拉面板
     if (graphMenuOpen) {
-      dbg('touchStartSkip', { reason: 'menuOpen' });
       setGraphMenuOpen(false);
       return;
     }
+    // 复用了未清理的旧触点（上次 touchEnd 丢失）时，这里同时刷新陈旧起点
     e.touches.forEach(t => {
-      const prev = touchesRef.current.get(t.identifier);
-      if (prev) {
-        if (prev.sx !== t.clientX || prev.sy !== t.clientY) {
-          // 复用了未清理的旧触点（上次 touchEnd 丢失）——刷新陈旧起点
-          dbg('staleTouch', { id: t.identifier, sx: prev.sx, sy: prev.sy });
-        }
-        touchesRef.current.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY });
-      } else {
-        touchesRef.current.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY });
-      }
+      touchesRef.current.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY });
     });
+    // 第二根手指按下时要知道第一根是否已在拖动，清零前先记下
+    const wasMoved = movedRef.current;
     movedRef.current = false;
     const size = touchesRef.current.size;
     if (size === 1) {
       const t = e.touches[0];
       const hit = hitTest(t.clientX, t.clientY);
       downNodeIdRef.current = hit ? hit.id : null;
-      const env = envRef.current;
-      dbg('down', {
-        hit: hit ? hit.id : null,
-        k: viewRef.current.k,
-        left: env.left,
-        top: env.top,
-        W: env.W,
-        H: env.H
-      });
       // 仅记录命中：按下不 pin、不升温——纯点击对布局零扰动（拖动时才在 move 中介入）
       dragNodeRef.current = hit;
       panStartRef.current = {
@@ -1014,7 +957,6 @@ const GraphPage: React.FC = () => {
           actionTargetRef.current = hit.id;
           actionBornRef.current = Date.now();
           dirtyRef.current = true; // 按钮渐入动画起点（主循环 220ms 内续绘）
-          dbg('longPress', { id: hit.id });
           hit.pinned = true; // 长按期间钉住，按钮稳定不漂
           Taro.vibrateShort({ type: 'light' });
           setTutTick(v => v + 1); // 遮罩挖孔要扩到新出现的 ＋/－ 按钮
@@ -1022,10 +964,11 @@ const GraphPage: React.FC = () => {
         }, LONG_PRESS_MS);
       }
     } else if (size === 2) {
-      // 双指：结束单指拖动，进入捏合
+      // 双指：取消长按判定，结束单指拖动，进入捏合
+      clearLongPressTimer();
       if (dragNodeRef.current) {
         const dn = dragNodeRef.current;
-        if (movedRef.current) {
+        if (wasMoved) {
           // 拖到一半改捏合：视同松手落定（只记坐标不冻结，方案 A）
           dn.pinned = false;
           store.saveNodeLayout(dn.id, dn.x, dn.y, false);
@@ -1057,13 +1000,9 @@ const GraphPage: React.FC = () => {
         p.y = t.clientY;
       }
     });
-    const prevMoved = movedRef.current;
     touchesRef.current.forEach(p => {
       if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_SLOP) movedRef.current = true;
     });
-    if (!prevMoved && movedRef.current) {
-      dbg('firstMove', { drag: dragNodeRef.current?.id || null, size: touchesRef.current.size });
-    }
 
     // 手指移动：取消长按判定；长按菜单已弹出则本次触摸不再拖动/平移
     if (movedRef.current && longPressTimerRef.current) clearLongPressTimer();
@@ -1135,7 +1074,6 @@ const GraphPage: React.FC = () => {
         const btn = hitActionButton(tap.clientX, tap.clientY);
         if (btn) {
           const targetId = actionTargetRef.current;
-          dbg('tapBtn', { btn, target: targetId });
           dismissActionButtons();
           if (targetId) {
             if (btn === 'add') addBlankNode(targetId);
@@ -1145,28 +1083,22 @@ const GraphPage: React.FC = () => {
         }
         // 2. 已有操作按钮：点其他处收起
         if (actionTargetRef.current) {
-          dbg('dismissOnly', { actionTarget: actionTargetRef.current });
           dismissActionButtons();
           return;
         }
         // 3. 关系标签：编辑/删除
         const link = hitEdgeLabel(tap.clientX, tap.clientY);
         if (link) {
-          dbg('tapEdge', { id: link.id, label: link.label });
           editEdge(link);
           return;
         }
         // 4. 节点 / 空白
         const downId = downNodeIdRef.current;
         if (downId) {
-          dbg('tapNode', { id: downId });
           selectNode(downId);
         } else {
-          dbg('tapBlank');
           closeCard();
         }
-      } else {
-        dbg('endNoTap', { moved: movedRef.current, longPress: wasLongPress });
       }
       dragNodeRef.current = null;
       panStartRef.current = null;
@@ -1269,7 +1201,6 @@ const GraphPage: React.FC = () => {
     setGraphMenuOpen(false);
     if (id === graphId) return;
     closeCard();
-    exitLinkMode();
     setGraphId(id);
     // 显式传入目标 id：setGraphId 是异步的，立即重建时闭包里还是旧 graphId
     if (engineRef.current) {
@@ -1312,12 +1243,6 @@ const GraphPage: React.FC = () => {
       engine.links.length === inputs.links.length &&
       engine.nodes.every(n => inputs.nodes.some(x => x.id === n.id)) &&
       engine.links.every(l => inputs.links.some(x => x.id === l.id));
-    dbg('storeSync', {
-      same: sameTopology,
-      nodes: inputs.nodes.length,
-      links: inputs.links.length,
-      withAvatar: inputs.nodes.filter(n => n.hasAvatar).length
-    });
     if (sameTopology) {
       // 仅显示字段变化（改名 / 改称谓）：原地同步，布局不抖动
       inputs.nodes.forEach(input => {
@@ -1326,7 +1251,6 @@ const GraphPage: React.FC = () => {
           target.name = input.name;
           target.role = input.role;
           target.gen = input.gen;
-          target.gender = input.gender;
           target.hasAvatar = input.hasAvatar;
           target.avatar = input.avatar;
           target.incomplete = input.incomplete;
@@ -1518,14 +1442,6 @@ const GraphPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineReady, version, graphId]);
 
-  /** 跨页步骤「选择名片」由名片页渲染：记录交接时序（排查切页闪两下） */
-  useEffect(() => {
-    if (tut.active && tutStep?.advance === 'cardBound') {
-      dbg('tutCrossPageHandoff', { step: tut.stepIndex, graphId });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tut.active, tut.stepIndex, graphId]);
-
   /** 首次进入提示：引擎就绪 + 有真实图谱时只弹一次 */
   useEffect(() => {
     if (!engineReady || store.tutorialActive || promptCheckedRef.current) return;
@@ -1587,8 +1503,6 @@ const GraphPage: React.FC = () => {
 
   /** 关联名片：暂存节点 id → 切到名片 Tab 选择（名片页每张名片带关联图标） */
   const openLinkCard = (nodeId: string) => {
-    const n = store.getNode(nodeId);
-    dbg('openLinkCard', { nodeId, name: n ? nameOfNode(n) : '' });
     store.linkPendingNodeId = nodeId;
     // 教程：先推进到「选择名片」，再切页（graph hide 时该步骤属于预期跳转，不中断）
     if (nodeId === tut.practiceNodeId) tutorialController.notify('linkPending');
@@ -1617,10 +1531,8 @@ const GraphPage: React.FC = () => {
   //    resizeSkip（真机 queryRect 返回空），env.H 滞留在卡片展开时的旧值——
   //    位图被拉伸、hitTest 坐标整体错位，节点全部点不中（真机日志实锤的卡死根因）
   useDidShow(() => {
-    dbg('graphDidShow', { engine: !!engineRef.current, raf: !!rafRef.current, frames: framesRef.current });
     // 从名片页返回但未完成关联：丢弃残留 pending，防止下次在名片页点 🔗 误关联到旧节点
     if (store.linkPendingNodeId) {
-      dbg('linkPendingDiscard', { id: store.linkPendingNodeId });
       store.linkPendingNodeId = null;
     }
     const env = envRef.current;
@@ -1721,10 +1633,11 @@ const GraphPage: React.FC = () => {
           type="2d"
           id="graphCanvas"
           className={styles.canvas}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+          // Taro 的 CanvasTouch 类型缺 clientX/clientY（运行时有）
+          onTouchStart={handleTouchStart as any}
+          onTouchMove={handleTouchMove as any}
+          onTouchEnd={handleTouchEnd as any}
+          onTouchCancel={handleTouchEnd as any}
         />
       </View>
 
@@ -1819,7 +1732,7 @@ const GraphPage: React.FC = () => {
                     </View>
                   )}
                 </View>
-                {/* 名字下方：称谓（可直接编辑，双向绑定名片称谓）+ 出生年月 */}
+                {/* 名字下方：称谓（可直接编辑，存在图谱节点上）+ 出生年月 */}
                 <View className={styles.sub}>
                   <Input
                     className={styles.tagInput}

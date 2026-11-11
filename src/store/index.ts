@@ -6,7 +6,6 @@ import type {
   Graph,
   GraphInput,
   GraphNode,
-  GraphType,
   NodeInput
 } from '@/types';
 import { dbList, dbAdd, dbUpdate, dbRemove, callFunction } from '@/services/cloud';
@@ -20,9 +19,8 @@ function uid(prefix: string): string {
 }
 
 /**
- * 数据存储（卡片云化版）
- * - 名片 Card 走 CloudBase `cards` 集合：启动预加载进内存，写操作内存立即生效 + 云端穿透
- * - 图谱/节点/关系暂为本地内存 mock（后续上云），方法签名不变
+ * 数据存储
+ * - 名片、图谱、节点、关系都走 CloudBase 集合：启动时载入内存，写操作内存立即生效 + 云端穿透
  * - 所有页面/组件只依赖 store 的公开方法，不直接操作内部数组
  * - 变更后通过 subscribe 通知，页面经 useStoreVersion 感知
  */
@@ -47,17 +45,6 @@ class Store {
 
   /** 当前用户 openid（账号锚点，登录后写入；卡片归属/认领/持有关系以此为准） */
   userOpenId = '';
-
-  /**
-   * 演示模式：账号密码登录（平台审核用）后置 true
-   * 数据读写走共享 demo_* 集合（不归属任何 openid，所有测试账号共用一份演示数据）
-   */
-  demoMode = false;
-
-  /** 写入归属字段：演示模式的数据不归属任何 openid（共享一份），正常模式归属当前用户 */
-  private docOwner(): { openId?: string } {
-    return this.demoMode ? {} : { openId: this.userOpenId };
-  }
 
   /** 卡片是否已从云端加载完成（首屏 loading 用） */
   cardsReady = false;
@@ -122,7 +109,8 @@ class Store {
       for (let s = skip; ; s += PAGE) {
         const batch = await this.fetchCardsPage(s, PAGE);
         if (!batch.length) break;
-        this.cards.push(...batch);
+        // 补拉期间可能已收下名片进了内存，按 id 去重
+        this.cards.push(...batch.filter(c => !this.cards.some(x => x.id === c.id)));
         this.emit();
         if (batch.length < PAGE) break;
         if (s >= 1000) break; // 安全阀，防异常时死循环
@@ -195,7 +183,6 @@ class Store {
   /** 登录成功后写入账号锚点（替换本地 mock 用户） */
   setUserOpenId(openId: string): void {
     this.userOpenId = openId;
-    console.info('[Store] 账号锚点已更新：userOpenId = %s', openId);
     this.emit();
   }
 
@@ -236,7 +223,7 @@ class Store {
       this.emit();
       return card;
     }
-    await dbAdd('cards', { ...card, ...this.docOwner() });
+    await dbAdd('cards', { ...card, openId: this.userOpenId });
     this.cards.push(card);
     this.emit();
     console.info('[Store] 创建名片：%s（%s）已持久化', card.name, card.id);
@@ -257,9 +244,7 @@ class Store {
     }
     Object.assign(card, patch);
     this.emit();
-    this.pushToCloud('更新', () =>
-      dbUpdate('cards', { id }, patch)
-    );
+    this.queueWrite('cards', id, patch);
   }
 
   /** 删除名片：图谱中引用它的节点变为匿名节点（引用置空，不报错；云端节点同步清空 cardId） */
@@ -296,6 +281,42 @@ class Store {
     fn().catch(err => {
       console.error('[Store] %s同步云端失败:', action, err);
     });
+  }
+
+  // ---- 字段修改的云端写入：同一条记录 500ms 内合并成一次（输入框每打一个字都会走到这里） ----
+
+  private pendingWrites = new Map<string, { collection: 'cards' | 'nodes'; id: string; patch: Record<string, unknown> }>();
+  private writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private queueWrite(collection: 'cards' | 'nodes', id: string, patch: Record<string, unknown>): void {
+    // 入队时判断沙箱：指引开始前排队的真实修改，到点时仍要写云端
+    if (this.tutorialActive) return;
+    const key = `${collection}:${id}`;
+    const prev = this.pendingWrites.get(key);
+    this.pendingWrites.set(key, { collection, id, patch: { ...prev?.patch, ...patch } });
+    if (this.writeTimer) clearTimeout(this.writeTimer);
+    this.writeTimer = setTimeout(() => this.flushWrites(), 500);
+  }
+
+  private flushWrites(): void {
+    if (this.writeTimer) clearTimeout(this.writeTimer);
+    this.writeTimer = null;
+    const entries = Array.from(this.pendingWrites.values());
+    this.pendingWrites.clear();
+    entries.forEach(({ collection, id, patch }) => {
+      dbUpdate(collection, { id }, patch).catch(err => {
+        console.error('[Store] 更新 %s 同步云端失败:', collection, err);
+      });
+    });
+  }
+
+  /** 小程序切后台时调用：把还在等待合并的写入立刻发出去，避免被杀进程后丢失 */
+  flushPendingWrites(): void {
+    this.flushWrites();
+    if (this.layoutTimer) {
+      clearTimeout(this.layoutTimer);
+      this.flushNodeLayout();
+    }
   }
 
   // ============ 活名片（收到的分享名片） ============
@@ -338,7 +359,8 @@ class Store {
       const before = this.getCard(existing.id);
       this.applySharedContent(existing.id, latest);
       // 内容有变化：更新最新版本号（红点判定用），seen 保留原值 = 未读
-      if (version > (before?.updatedVersion ?? 0)) {
+      // contentVersion 是内容哈希，大小没有意义，只能比较相等
+      if (version !== (before?.updatedVersion ?? 0)) {
         this.updateCard(existing.id, { updatedVersion: version });
       }
       console.info('[Store] 活名片已存在，刷新副本：%s', refCardId);
@@ -352,7 +374,7 @@ class Store {
           this.cards.push(dup);
         }
         this.applySharedContent(dup.id, latest);
-        if (version > (dup.updatedVersion ?? 0)) {
+        if (version !== (dup.updatedVersion ?? 0)) {
           this.updateCard(dup.id, { updatedVersion: version });
         }
         console.info('[Store] 云端已有该活名片，复用并刷新副本：%s', dup.id);
@@ -373,7 +395,7 @@ class Store {
       createdAt: new Date().toISOString()
     };
     try {
-      await dbAdd('cards', { ...card, ...this.docOwner() });
+      await dbAdd('cards', { ...card, openId: this.userOpenId });
     } catch (err) {
       throw new Error(`写入名片列表失败: ${(err as Error)?.message ?? err}`);
     }
@@ -383,21 +405,28 @@ class Store {
     return card;
   }
 
-  /** 打开活名片时拉源卡最新内容并刷新本地副本（改源卡全端同步的核心） */
-  async refreshSharedCard(localId: string): Promise<void> {
+  /** 活名片最近一次拉取成功的时间（列表刷新节流用） */
+  private sharedRefreshedAt = new Map<string, number>();
+
+  /**
+   * 拉源卡最新内容并刷新本地副本（改源卡全端同步的核心）
+   * - swap: true（打开详情）：互换补跑（幂等）。新用户收名片可能发生在一键授权建名片之前，
+   *   首次互换会因「尚无名片」被跳过，这里补上（云函数侧按 refCardId 去重，不会重复建条）
+   * - swap: false（列表刷新）：不互换，同一张 60 秒内不重复拉
+   */
+  async refreshSharedCard(localId: string, opts: { swap: boolean }): Promise<void> {
     const local = this.getCard(localId);
     if (!local?.refCardId) return;
-    // swap: true —— 互换在每次打开时补跑（幂等）：
-    // 新用户收名片可能发生在一键授权建名片之前，首次互换会因「尚无名片」被跳过，
-    // 刷新时补跑可兜住该时序（云函数侧按 refCardId 去重，不会重复建条）
-    const remote = await callFunction<Card & { _id?: string }>('getCard', { id: local.refCardId, swap: true });
+    if (!opts.swap && Date.now() - (this.sharedRefreshedAt.get(localId) ?? 0) < 60000) return;
+    const remote = await callFunction<Card & { _id?: string }>('getCard', { id: local.refCardId, swap: opts.swap });
+    this.sharedRefreshedAt.set(localId, Date.now());
     const { _id: _ignored, ...latest } = remote;
     const version = latest.contentVersion ?? 0;
+    // 内容没变：不写库
+    if (version === (local.updatedVersion ?? 0)) return;
     this.applySharedContent(localId, latest);
-    // 内容版本推进 → 红点「有更新」（seenVersion 保留，点开详情才标记已读）
-    if (version > (local.updatedVersion ?? 0)) {
-      this.updateCard(localId, { updatedVersion: version });
-    }
+    // 红点「有更新」：seenVersion 保留，点开详情才标记已读
+    this.updateCard(localId, { updatedVersion: version });
     console.info('[Store] 活名片已同步最新：%s', local.refCardId);
   }
 
@@ -471,7 +500,7 @@ class Store {
     this.emit();
     console.info('[Store] 创建图谱：%s（%s）', graph.name, graph.id);
     this.pushToCloud('创建图谱', () =>
-      dbAdd('graphs', { ...graph, ...this.docOwner() })
+      dbAdd('graphs', { ...graph, openId: this.userOpenId })
     );
     return graph;
   }
@@ -525,7 +554,7 @@ class Store {
     this.nodes.push(node);
     this.emit();
     this.pushToCloud('创建节点', () =>
-      dbAdd('nodes', { ...node, ...this.docOwner() })
+      dbAdd('nodes', { ...node, openId: this.userOpenId })
     );
     return node;
   }
@@ -544,9 +573,7 @@ class Store {
     }
     Object.assign(node, patch);
     this.emit();
-    this.pushToCloud('更新节点', () =>
-      dbUpdate('nodes', { id }, patch)
-    );
+    this.queueWrite('nodes', id, patch);
   }
 
   // ---- 布局坐标持久化（B 方案）：拖动结束调用，防抖合并写云端 ----
@@ -618,7 +645,7 @@ class Store {
     this.edges.push(edge);
     this.emit();
     this.pushToCloud('创建关系', () =>
-      dbAdd('edges', { ...edge, ...this.docOwner() })
+      dbAdd('edges', { ...edge, openId: this.userOpenId })
     );
     return edge;
   }
@@ -669,11 +696,6 @@ class Store {
     return this.listGraphs().filter(g => graphIds.has(g.id));
   }
 
-  /** 图谱类型默认布局用的关系标签集合由 mock/presets 提供，这里按类型取图谱 */
-  listGraphsByType(type: GraphType): Graph[] {
-    return this.listGraphs().filter(g => g.type === type);
-  }
-
   // ============ 新人指引沙箱 ============
 
   /** 教程节点 code（p1/g1…）→ 当前批次实体 id */
@@ -688,10 +710,6 @@ class Store {
   /** 判断某名片是否示例数据（页面角标 / 禁止删除用） */
   isTutorialCard(id: string): boolean {
     return this.tutorialCards.some(c => c.id === id);
-  }
-
-  isTutorialNode(id: string): boolean {
-    return this.tutorialNodes.some(n => n.id === id);
   }
 
   /**

@@ -25,7 +25,6 @@ const FeedbackPage: React.FC = () => {
         content: text,
         contact: contact.trim(),
         openId: store.userOpenId,
-        _openid: store.userOpenId,
         createdAt: new Date().toISOString()
       });
       toast.success('感谢你的反馈');

@@ -37,7 +37,6 @@ export interface TutorialStep {
   /** 进入该步骤时的取景目标（code 同上） */
   camera?: { code: string; zoom?: number };
   advance: TutorialAdvance;
-  allowPrev?: boolean;
 }
 
 /** 中断快照：只存步骤与练习实体，不存任何 mock 数据 */

@@ -14,7 +14,6 @@ export interface ForceNodeInput {
   role: string;
   /** 代际（家族图谱 1/2/3，其余类型缺省按 2 处理） */
   gen?: number;
-  gender: 'm' | 'f';
   /** 关联名片是否有头像图片（无则圆圈内写名字） */
   hasAvatar: boolean;
   /** 关联名片头像图片地址（有值时圆圈内绘制照片） */
@@ -75,8 +74,8 @@ const ALPHA_MIN = 0.004;
 /** 代际目标纵坐标 */
 const GEN_Y: Record<number, number> = { 1: -190, 2: 10, 3: 210 };
 
-/** FNV-1a 字符串哈希（与 demo 一致，seed 布点与头像配色共用） */
-export function fnvHash(str: string): number {
+/** FNV-1a 字符串哈希（与 demo 一致，seed 布点用） */
+function fnvHash(str: string): number {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
@@ -107,8 +106,6 @@ export class ForceGraph {
   links: ForceLink[] = [];
   /** 活动量：1 全速解缠 → 衰减至 0.004 保留微调 */
   alpha = 1;
-  /** 常态活动量（径向星图模式为弱微调，避免搅乱放射形状） */
-  baseAlpha = 1;
   crossTicks = 0;
 
   private byId = new Map<string, ForceNode>();
@@ -158,8 +155,8 @@ export class ForceGraph {
         n.y = (ego ? ego.y : 0) + Math.sin(ang) * 220;
       });
     }
-    this.baseAlpha = this.radialMode ? 0.08 : 1;
-    this.alpha = this.baseAlpha;
+    // 径向星图模式只做弱微调，避免搅乱放射形状
+    this.alpha = this.radialMode ? 0.08 : 1;
 
     // 恢复持久化布局：seed 会重排全部坐标，这里把有保存坐标的节点复位
     // （只记位置不冻结：恢复后仍参与力学，邻居弹力正常；拖动中/长按的临时 pin 由交互层管理）
@@ -449,10 +446,10 @@ export class ForceGraph {
     let maxX = -Infinity;
     let maxY = -Infinity;
     this.nodes.forEach(n => {
-      minX = Math.min(minX, n.x - 56); // R_NODE 26 + 30
+      minX = Math.min(minX, n.x - 56);
       maxX = Math.max(maxX, n.x + 56);
-      minY = Math.min(minY, n.y - 60); // R_NODE 26 + 34
-      maxY = Math.max(maxY, n.y + 82); // R_NODE 26 + 56
+      minY = Math.min(minY, n.y - 60);
+      maxY = Math.max(maxY, n.y + 82);
     });
     return { minX, minY, maxX, maxY };
   }

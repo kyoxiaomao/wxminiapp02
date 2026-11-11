@@ -67,28 +67,6 @@
   text-align: left;
 }
 
-// 称谓（可编辑，下划线输入样式，左对齐）
-.jobRow {
-  margin-top: 4rpx;
-  display: flex;
-  align-items: baseline;
-  gap: 10rpx;
-}
-
-.jobLabel {
-  font-size: $font-size-sm;
-  color: $color-text-tertiary;
-}
-
-.jobInput {
-  width: 220rpx;
-  font-size: $font-size-md;
-  color: $color-text-secondary;
-  text-align: left;
-  padding-bottom: 6rpx;
-  border-bottom: 2rpx solid $color-border;
-}
-
 /* ---------- 右上角模板下拉 ---------- */
 .tplDropdown {
   position: absolute;
@@ -381,10 +359,4 @@
 .saveBtnDisabled {
   opacity: 0.5;
 }
-
-.deleteBtn {
-  flex: 0 0 200rpx;
-  background: $color-bg-card;
-  color: $color-error;
-  border: 1rpx solid $color-error;
-}
+

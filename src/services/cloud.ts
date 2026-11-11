@@ -31,29 +31,13 @@ export async function uploadFile(cloudPath: string, filePath: string): Promise<s
   return res.fileID
 }
 
-// ============ 统一数据访问层 ============
-// 正常模式：客户端 SDK 直连集合（数据归属当前 openid）
-// 演示模式（账号密码登录）：走 demoRW 云函数操作共享 demo_* 集合
-//   （demo_* 集合客户端 ACL 无法开放给所有用户，必须服务端读写绕过）
-
-let demoMode = false
-
-/** 切换演示模式数据通道（auth.setDemoMode 时同步调用） */
-export function setDemoCloudMode(on: boolean): void {
-  demoMode = on
-}
+// ============ 统一数据访问层：客户端 SDK 直连集合（数据归属当前 openid） ============
 
 export async function dbList<T = any>(
   collection: string,
   query: Record<string, any> = {},
   opts?: { skip?: number; limit?: number }
 ): Promise<T[]> {
-  if (demoMode) {
-    const all = await callFunction<T[]>('demoRW', { collection, action: 'list', query })
-    const skip = opts?.skip ?? 0
-    const limit = opts?.limit ?? all.length
-    return all.slice(skip, skip + limit)
-  }
   const hasQuery = Object.keys(query).length > 0
   let q: any = hasQuery ? getDatabase().collection(collection).where(query) : getDatabase().collection(collection)
   if (opts?.skip) q = q.skip(opts.skip)
@@ -63,29 +47,20 @@ export async function dbList<T = any>(
 }
 
 export async function dbAdd(collection: string, data: Record<string, any>): Promise<void> {
-  if (demoMode) {
-    await callFunction('demoRW', { collection, action: 'add', data })
-    return
-  }
   await getDatabase().collection(collection).add({ data })
 }
 
+// Taro 的类型里 where() 之后没有 update / remove（微信 SDK 运行时有），这里用 any
 export async function dbUpdate(
   collection: string,
   query: Record<string, any>,
   patch: Record<string, any>
 ): Promise<void> {
-  if (demoMode) {
-    await callFunction('demoRW', { collection, action: 'update', query, data: patch })
-    return
-  }
-  await getDatabase().collection(collection).where(query).update({ data: patch })
+  const q: any = getDatabase().collection(collection).where(query)
+  await q.update({ data: patch })
 }
 
 export async function dbRemove(collection: string, query: Record<string, any>): Promise<void> {
-  if (demoMode) {
-    await callFunction('demoRW', { collection, action: 'remove', query })
-    return
-  }
-  await getDatabase().collection(collection).where(query).remove()
+  const q: any = getDatabase().collection(collection).where(query)
+  await q.remove()
 }

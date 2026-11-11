@@ -1,0 +1,1 @@
+@docs/AI-RULES.md
